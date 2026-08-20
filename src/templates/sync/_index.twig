@@ -1,0 +1,210 @@
+{% extends '_layouts/cp' %}
+{% import '_includes/forms' as forms %}
+
+{% set title = 'Sync'|t('zo') %}
+{% set selectedSubnavItem = 'sync' %}
+
+{% set typeLabels = {
+    contact: 'Customer'|t('zo'),
+    item: 'Item'|t('zo'),
+    invoice: 'Invoice'|t('zo'),
+    salesorder: 'Sales order'|t('zo'),
+    payment: 'Payment'|t('zo'),
+    refund: 'Refund'|t('zo')
+} %}
+
+{% block content %}
+    {% if not settings.getIsConnected() %}
+        <div class="pane">
+            <p class="warning">
+                {{ 'Zo is not connected to Zoho Books.'|t('zo') }}
+                <a href="{{ url('settings/plugins/zo') }}">{{ 'Connect it'|t('zo') }}</a>
+            </p>
+        </div>
+    {% endif %}
+
+    <div class="pane">
+        <div class="flex" style="gap: 28px; flex-wrap: wrap;">
+            <div>
+                <div class="light smalltext">{{ 'Synced'|t('zo') }}</div>
+                <div style="font-size: 22px;">{{ stats.synced }}</div>
+            </div>
+            <div>
+                <div class="light smalltext">{{ 'Failed'|t('zo') }}</div>
+                <div style="font-size: 22px;" class="{{ stats.failed ? 'error' : '' }}">{{ stats.failed }}</div>
+            </div>
+            <div>
+                <div class="light smalltext">{{ 'Skipped'|t('zo') }}</div>
+                <div style="font-size: 22px;">{{ stats.skipped }}</div>
+            </div>
+            <div>
+                <div class="light smalltext" title="{{ 'Documents whose Zoho total does not match what Commerce charged.'|t('zo') }}">
+                    {{ 'Not reconciled'|t('zo') }}
+                </div>
+                <div style="font-size: 22px;" class="{{ stats.variance ? 'error' : '' }}">{{ stats.variance }}</div>
+            </div>
+            <div>
+                <div class="light smalltext">{{ 'Awaiting sync'|t('zo') }}</div>
+                <div style="font-size: 22px;">{{ unsynced.count }}{{ unsynced.exact ? '' : '+' }}</div>
+            </div>
+        </div>
+
+        {% if canSync and isPro and unsynced.count %}
+            <div style="margin-top: 14px;">
+                <button type="button" class="btn submit" id="zo-backfill">{{ 'Backfill everything'|t('zo') }}</button>
+                <span id="zo-backfill-note" class="light"></span>
+            </div>
+        {% elseif canSync and not isPro and unsynced.count %}
+            <p class="light" style="margin-top: 14px;">
+                {{ 'Backfilling past orders in bulk is a Pro feature. On Lite, sync them one at a time from each order.'|t('zo') }}
+            </p>
+        {% endif %}
+    </div>
+
+    <div class="pane">
+        <form method="get" action="{{ url('zo/sync') }}" class="flex" style="gap: 10px; align-items: flex-end;">
+            {{ forms.select({
+                name: 'type',
+                value: type,
+                options: [{ label: 'All types'|t('zo'), value: '' }]|merge(
+                    typeLabels|keys|map(t => { label: typeLabels[t], value: t })
+                )
+            }) }}
+            {{ forms.select({
+                name: 'status',
+                value: status,
+                options: [
+                    { label: 'Any status'|t('zo'), value: '' },
+                    { label: 'Synced'|t('zo'), value: 'synced' },
+                    { label: 'Failed'|t('zo'), value: 'failed' },
+                    { label: 'Pending'|t('zo'), value: 'pending' },
+                    { label: 'Skipped'|t('zo'), value: 'skipped' },
+                    { label: 'Not reconciled'|t('zo'), value: 'variance' }
+                ]
+            }) }}
+            {{ forms.text({ name: 'search', value: search, placeholder: 'Order or document number'|t('zo') }) }}
+            <button type="submit" class="btn">{{ 'Filter'|t('zo') }}</button>
+        </form>
+    </div>
+
+    {% if links|length %}
+        <table class="data fullwidth collapsible">
+            <thead>
+            <tr>
+                <th>{{ 'Type'|t('zo') }}</th>
+                <th>{{ 'Craft'|t('zo') }}</th>
+                <th>{{ 'Zoho Books'|t('zo') }}</th>
+                <th>{{ 'Status'|t('zo') }}</th>
+                <th class="rightalign">{{ 'Commerce'|t('zo') }}</th>
+                <th class="rightalign">{{ 'Zoho'|t('zo') }}</th>
+                <th>{{ 'Updated'|t('zo') }}</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for link in links %}
+                <tr data-id="{{ link.id }}">
+                    <td>{{ typeLabels[link.type] ?? link.type }}</td>
+                    <td>
+                        {% if link.elementId %}
+                            <a href="{{ url('commerce/orders/' ~ link.elementId) }}"><code>{{ link.craftKey }}</code></a>
+                        {% else %}
+                            <code>{{ link.craftKey }}</code>
+                        {% endif %}
+                    </td>
+                    <td><code>{{ link.zohoNumber ?: link.zohoId ?: '—' }}</code></td>
+                    <td>
+                        {% if link.status == 'synced' %}
+                            <span class="status green"></span> {{ 'Synced'|t('zo') }}
+                        {% elseif link.status == 'failed' %}
+                            <span class="status red"></span>
+                            <span title="{{ link.lastError }}">{{ link.lastError|slice(0, 70) }}</span>
+                            <span class="light">({{ link.attempts }})</span>
+                        {% elseif link.status == 'skipped' %}
+                            <span class="status"></span> {{ link.lastError ?: 'Skipped'|t('zo') }}
+                        {% else %}
+                            <span class="status orange"></span> {{ 'Pending'|t('zo') }}
+                        {% endif %}
+                    </td>
+                    <td class="rightalign">{{ link.craftTotal is not null ? link.craftTotal|number_format(2) : '' }}</td>
+                    <td class="rightalign {{ link.getHasVariance(settings.varianceTolerance) ? 'error' : '' }}">
+                        {{ link.zohoTotal is not null ? link.zohoTotal|number_format(2) : '' }}
+                    </td>
+                    <td>{{ link.dateUpdated ? link.dateUpdated|datetime('short') : '' }}</td>
+                    <td class="rightalign thin">
+                        {% if canSync and link.status == 'failed' %}
+                            <button type="button" class="btn small zo-retry" data-id="{{ link.id }}">{{ 'Retry'|t('zo') }}</button>
+                        {% endif %}
+                        {% if canManage and link.getIsSynced() %}
+                            <button type="button" class="btn small zo-unlink" data-id="{{ link.id }}">{{ 'Unlink'|t('zo') }}</button>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        {% set pages = (total / perPage)|round(0, 'ceil') %}
+        {% if pages > 1 %}
+            <div class="pane" style="margin-top: 12px;">
+                {% for p in 1..pages %}
+                    {% if p == page %}
+                        <strong style="padding: 0 4px;">{{ p }}</strong>
+                    {% else %}
+                        <a style="padding: 0 4px;" href="{{ url('zo/sync', { type: type, status: status, search: search, page: p }) }}">{{ p }}</a>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="pane">
+            <p class="light">{{ 'Nothing here yet.'|t('zo') }}</p>
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% js %}
+(function() {
+    function post(action, id, button) {
+        button.classList.add('disabled');
+        Craft.sendActionRequest('POST', action, { data: { linkId: id } })
+            .then(function(response) {
+                Craft.cp.displayNotice(response.data.message || '');
+                window.location.reload();
+            })
+            .catch(function(e) {
+                var data = (e.response && e.response.data) || {};
+                Craft.cp.displayError(data.message || {{ 'That didn’t work.'|t('zo')|json_encode|raw }});
+                button.classList.remove('disabled');
+            });
+    }
+
+    document.querySelectorAll('.zo-retry').forEach(function(button) {
+        button.addEventListener('click', function() { post('zo/sync/retry', button.dataset.id, button); });
+    });
+
+    document.querySelectorAll('.zo-unlink').forEach(function(button) {
+        button.addEventListener('click', function() {
+            if (!confirm({{ 'Unlink this document? It stays in Zoho Books — if you sync again without deleting it there, you will have two.'|t('zo')|json_encode|raw }})) {
+                return;
+            }
+            post('zo/sync/unlink', button.dataset.id, button);
+        });
+    });
+
+    var backfill = document.getElementById('zo-backfill');
+    if (backfill) {
+        backfill.addEventListener('click', function() {
+            backfill.classList.add('disabled');
+            Craft.sendActionRequest('POST', 'zo/sync/backfill')
+                .then(function(response) {
+                    document.getElementById('zo-backfill-note').textContent = response.data.message || '';
+                })
+                .catch(function() {
+                    document.getElementById('zo-backfill-note').textContent = {{ 'Couldn’t queue the backfill.'|t('zo')|json_encode|raw }};
+                    backfill.classList.remove('disabled');
+                });
+        });
+    }
+})();
+{% endjs %}

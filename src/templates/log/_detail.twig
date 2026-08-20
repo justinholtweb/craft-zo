@@ -1,0 +1,51 @@
+{% extends '_layouts/cp' %}
+
+{% set title = entry.action %}
+{% set selectedSubnavItem = 'log' %}
+{% set crumbs = [{ label: 'Log'|t('zo'), url: url('zo/log') }] %}
+
+{% block content %}
+    <div class="pane">
+        <table class="data fullwidth">
+            <tbody>
+            <tr><th style="width: 180px;">{{ 'Level'|t('zo') }}</th><td>{{ entry.level }}</td></tr>
+            <tr><th>{{ 'Endpoint'|t('zo') }}</th><td class="code">{{ entry.method }} {{ entry.endpoint }}</td></tr>
+            <tr><th>{{ 'HTTP status'|t('zo') }}</th><td>{{ entry.statusCode ?: '—' }}</td></tr>
+            <tr><th>{{ 'Zoho code'|t('zo') }}</th><td>{{ entry.zohoCode is not null ? entry.zohoCode : '—' }}</td></tr>
+            <tr><th>{{ 'Duration'|t('zo') }}</th><td>{{ entry.durationMs ? entry.durationMs ~ 'ms' : '—' }}</td></tr>
+            <tr><th>{{ 'Summary'|t('zo') }}</th><td>{{ entry.summary }}</td></tr>
+            {% if entry.elementId %}
+                <tr><th>{{ 'Order'|t('zo') }}</th><td><a href="{{ url('commerce/orders/' ~ entry.elementId) }}">#{{ entry.elementId }}</a></td></tr>
+            {% endif %}
+            <tr><th>{{ 'When'|t('zo') }}</th><td>{{ entry.dateCreated ? entry.dateCreated|datetime('long') : '' }}</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    {% if entry.message %}
+        <div class="pane">
+            <h2>{{ 'Message'|t('zo') }}</h2>
+            <pre class="code" style="white-space: pre-wrap;">{{ entry.message }}</pre>
+        </div>
+    {% endif %}
+
+    {% if not isPro %}
+        <div class="pane">
+            <p class="light">{{ 'Request and response bodies are a Pro feature.'|t('zo') }}</p>
+        </div>
+    {% endif %}
+
+    {% if entry.request %}
+        <div class="pane">
+            <h2>{{ 'Request'|t('zo') }}</h2>
+            <pre class="code" style="max-height: 400px; overflow: auto; white-space: pre-wrap;">{{ entry.request }}</pre>
+        </div>
+    {% endif %}
+
+    {% if entry.response %}
+        <div class="pane">
+            <h2>{{ 'Response'|t('zo') }}</h2>
+            <pre class="code" style="max-height: 400px; overflow: auto; white-space: pre-wrap;">{{ entry.response }}</pre>
+        </div>
+    {% endif %}
+{% endblock %}

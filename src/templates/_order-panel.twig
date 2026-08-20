@@ -1,0 +1,128 @@
+{# Rendered into Commerce's order edit screen through the `cp.commerce.order.edit.details` hook.
+   No <form> anywhere in here: the order edit screen is one big form, and the browser would hoist
+   these inputs into it. Every action posts through Craft.sendActionRequest instead. #}
+{% set links = status.links %}
+{% set invoice = status.invoice %}
+
+<div class="pane" id="zo-panel">
+    <div class="flex" style="justify-content: space-between; align-items: center;">
+        <h6 style="margin: 0;">{{ 'Zoho Books'|t('zo') }}</h6>
+        {% if invoice and invoice.getIsSynced() %}
+            <span class="status green"></span>
+        {% elseif links|length %}
+            <span class="status orange"></span>
+        {% else %}
+            <span class="status"></span>
+        {% endif %}
+    </div>
+
+    {% if not status.connected %}
+        <p class="light">{{ 'Zo is not connected to Zoho Books.'|t('zo') }}</p>
+    {% elseif links|length %}
+        <table class="data fullwidth" style="margin-top: 8px;">
+            <tbody>
+            {% for link in links %}
+                <tr>
+                    <td style="width: 30%;">
+                        {{ {
+                            contact: 'Customer'|t('zo'),
+                            item: 'Item'|t('zo'),
+                            invoice: 'Invoice'|t('zo'),
+                            salesorder: 'Sales order'|t('zo'),
+                            payment: 'Payment'|t('zo'),
+                            refund: 'Refund'|t('zo')
+                        }[link.type] ?? link.type }}
+                    </td>
+                    <td>
+                        {% if link.getIsSynced() %}
+                            <code>{{ link.zohoNumber ?: link.zohoId }}</code>
+                            {% if link.getHasVariance(tolerance) %}
+                                <span class="error" title="{{ 'Zoho’s total does not match what Commerce charged.'|t('zo') }}">
+                                    ⚠ {{ link.variance > 0 ? '+' : '' }}{{ link.variance|number_format(2) }}
+                                </span>
+                            {% endif %}
+                        {% elseif link.status == 'failed' %}
+                            <span class="error">{{ link.lastError|slice(0, 140) }}</span>
+                        {% elseif link.status == 'skipped' %}
+                            <span class="light">{{ link.lastError ?: 'Skipped'|t('zo') }}</span>
+                        {% else %}
+                            <span class="light">{{ 'Pending'|t('zo') }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="light">
+            {% if status.eligible %}
+                {{ 'Not synced yet.'|t('zo') }}
+            {% else %}
+                {{ status.reason }}
+            {% endif %}
+        </p>
+    {% endif %}
+
+    {% if canSync and status.connected %}
+        <div style="margin-top: 10px;">
+            <button type="button" class="btn small" id="zo-sync-now" data-order="{{ order.id }}">
+                {{ invoice and invoice.getIsSynced() ? 'Re-check'|t('zo') : 'Sync now'|t('zo') }}
+            </button>
+            <button type="button" class="btn small" id="zo-preview-order" data-order="{{ order.id }}">
+                {{ 'Preview payload'|t('zo') }}
+            </button>
+            <span id="zo-panel-note" class="light"></span>
+        </div>
+        <pre id="zo-panel-preview" class="code" style="display:none; max-height: 260px; overflow:auto; background:#f7f8f9; padding:8px; border-radius:4px; margin-top:8px;"></pre>
+    {% endif %}
+</div>
+
+{% js %}
+(function() {
+    var note = document.getElementById('zo-panel-note');
+    function say(message, isError) {
+        if (!note) return;
+        note.textContent = message;
+        note.className = isError ? 'error' : 'light';
+    }
+
+    var sync = document.getElementById('zo-sync-now');
+    if (sync) {
+        sync.addEventListener('click', function() {
+            sync.classList.add('disabled');
+            say('…', false);
+            Craft.sendActionRequest('POST', 'zo/sync/order', { data: { orderId: sync.dataset.order } })
+                .then(function(response) {
+                    say(response.data.message, !response.data.success);
+                    if (response.data.success) { window.location.reload(); }
+                })
+                .catch(function(e) {
+                    var data = (e.response && e.response.data) || {};
+                    say(data.message || {{ 'Sync failed.'|t('zo')|json_encode|raw }}, true);
+                })
+                .then(function() { sync.classList.remove('disabled'); });
+        });
+    }
+
+    var preview = document.getElementById('zo-preview-order');
+    if (preview) {
+        preview.addEventListener('click', function() {
+            var out = document.getElementById('zo-panel-preview');
+            say('…', false);
+            Craft.sendActionRequest('GET', 'zo/sync/preview', { params: { orderId: preview.dataset.order } })
+                .then(function(response) {
+                    out.style.display = 'block';
+                    out.textContent = response.data.payload;
+                    say(
+                        Craft.t('zo', 'Projected {projected} · Commerce {craft}', {
+                            projected: response.data.projectedTotal.toFixed(2),
+                            craft: response.data.craftTotal.toFixed(2)
+                        }),
+                        Math.abs(response.data.projectedTotal - response.data.craftTotal) > 0.005
+                    );
+                })
+                .catch(function() { say({{ 'Couldn’t build a preview.'|t('zo')|json_encode|raw }}, true); });
+        });
+    }
+})();
+{% endjs %}

@@ -1,0 +1,642 @@
+{# Field names carry no `settings[…]` prefix: `craft\base\Plugin::settingsResponse()` runs this
+   template's output through `View::namespaceInputs(…, 'settings')`, so a name written as
+   `settings[foo]` here posts as `settings[settings][foo]` and saves nothing at all — the screen
+   looks perfect, Craft reports “Plugin settings saved”, and every edit is silently discarded. #}
+{% import '_includes/forms' as forms %}
+
+{% set isPro = plugin.isPro() %}
+{% set connected = settings.getIsConnected() %}
+
+{% if not commerceReady %}
+    <div class="pane">
+        <p class="error">{{ 'Craft Commerce is not installed or enabled. Zo needs it to do anything.'|t('zo') }}</p>
+    </div>
+{% endif %}
+
+{% if not isPro %}
+    <div class="pane" style="border-left: 3px solid #cdd8e4;">
+        <p>
+            <strong>{{ 'You’re running Zo Lite.'|t('zo') }}</strong>
+            {{ 'Payments, refunds, item sync, sales orders, mapped tax, custom fields, backfill and the log payloads are Pro features. Their settings are shown below but have no effect until you upgrade.'|t('zo') }}
+        </p>
+    </div>
+{% endif %}
+
+{# ------------------------------------------------------------------ #}
+<h2>{{ 'Connection'|t('zo') }}</h2>
+
+<div class="pane">
+    {% if connected %}
+        <p>
+            <span class="checkbox-icon" data-icon="check"></span>
+            <strong>{{ 'Zo is connected to Zoho Books.'|t('zo') }}</strong>
+        </p>
+        <p>
+            <button type="button" class="btn" id="zo-test">{{ 'Test connection'|t('zo') }}</button>
+            <span id="zo-test-note" class="light"></span>
+        </p>
+        <p>
+            <a class="btn" href="{{ actionUrl('zo/settings/connect') }}">{{ 'Reconnect'|t('zo') }}</a>
+            <button type="button" class="btn" id="zo-disconnect">{{ 'Disconnect'|t('zo') }}</button>
+        </p>
+    {% else %}
+        <p>{{ 'Create a Server-based Application in the Zoho API console, then paste its client ID and secret below and connect.'|t('zo') }}</p>
+        <p>
+            <a class="btn submit{{ settings.getCanConnect() ? '' : ' disabled' }}"
+               href="{{ settings.getCanConnect() ? actionUrl('zo/settings/connect') : '#' }}">
+                {{ 'Connect to Zoho Books'|t('zo') }}
+            </a>
+            {% if not settings.getCanConnect() %}
+                <span class="light">{{ 'Save a client ID and secret first.'|t('zo') }}</span>
+            {% endif %}
+        </p>
+    {% endif %}
+
+    {{ forms.textField({
+        label: 'Authorized Redirect URI'|t('zo'),
+        instructions: 'Register this in the Zoho API console, exactly as shown. Zoho matches it character for character.'|t('zo'),
+        id: 'zo-redirect',
+        value: settings.getRedirectUri(),
+        readonly: true,
+        class: 'code'
+    }) }}
+
+    {% if not settings.getRedirectUriIsClean() %}
+        <p class="warning">
+            {{ 'This URL contains a query string because the site has neither `omitScriptNameInUrls` nor `usePathInfo` enabled. Zoho’s redirect URIs are ordinarily bare paths — turn one of those settings on before registering it.'|t('zo') }}
+        </p>
+    {% endif %}
+</div>
+
+{{ forms.selectField({
+    label: 'Data centre'|t('zo'),
+    instructions: 'The region your Zoho account lives in. Zoho’s regions do not share data, and a token from one is rejected by another — usually as a bare 401 that looks like bad credentials.'|t('zo'),
+    id: 'dataCenter',
+    name: 'dataCenter',
+    value: settings.dataCenter,
+    options: dataCenterOptions
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'Client ID'|t('zo'),
+    instructions: 'From the Zoho API console.'|t('zo'),
+    id: 'clientId',
+    name: 'clientId',
+    value: settings.clientId,
+    suggestEnvVars: true
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'Client secret'|t('zo'),
+    id: 'clientSecret',
+    name: 'clientSecret',
+    value: settings.clientSecret,
+    suggestEnvVars: true
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'Refresh token'|t('zo'),
+    instructions: 'Filled in for you when you connect. **Move it to an environment variable** — plugin settings are stored in project config, and project config gets committed.'|t('zo'),
+    id: 'refreshToken',
+    name: 'refreshToken',
+    value: settings.refreshToken,
+    suggestEnvVars: true
+}) }}
+
+{% if settings.refreshToken and settings.refreshToken[0:1] != '$' %}
+    <p class="warning" style="margin-top: -14px;">
+        {{ 'This refresh token is stored in project config in plain text. Anyone with repository access can use it to read and write your books.'|t('zo') }}
+    </p>
+{% endif %}
+
+<div class="field">
+    {{ forms.autosuggest({
+        id: 'organizationId',
+        name: 'organizationId',
+        value: settings.organizationId,
+        suggestEnvVars: true
+    }) }}
+    <div class="heading" style="margin-top: 4px;">
+        <button type="button" class="btn small" id="zo-orgs">{{ 'Look up organizations'|t('zo') }}</button>
+        <span id="zo-orgs-note" class="light"></span>
+    </div>
+</div>
+<div class="field" style="margin-top: -18px;">
+    <div class="instructions"><p>{{ 'Organization ID — every Zoho Books call is scoped to one organization. Get it wrong on a multi-entity account and the invoices file against the wrong company.'|t('zo') }}</p></div>
+</div>
+
+{# ------------------------------------------------------------------ #}
+<hr>
+<h2>{{ 'What gets synced'|t('zo') }}</h2>
+
+{{ forms.lightswitchField({
+    label: 'Sync when an order is completed'|t('zo'),
+    instructions: 'The usual choice. Work is handed to the queue, so checkout is never waiting on Zoho.'|t('zo'),
+    id: 'autoSyncOnComplete',
+    name: 'autoSyncOnComplete',
+    on: settings.autoSyncOnComplete
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Sync when an order is fully paid'|t('zo'),
+    instructions: 'For stores that invoice on payment rather than on order.'|t('zo'),
+    id: 'autoSyncOnPaid',
+    name: 'autoSyncOnPaid',
+    on: settings.autoSyncOnPaid
+}) }}
+
+{{ forms.checkboxSelectField({
+    label: 'Also sync when an order reaches these statuses'|t('zo'),
+    id: 'syncOnStatusHandles',
+    name: 'syncOnStatusHandles',
+    options: statusOptions,
+    values: settings.syncOnStatusHandles
+}) }}
+
+{{ forms.checkboxSelectField({
+    label: 'Only sync orders in these statuses'|t('zo'),
+    instructions: 'Leave everything unchecked to sync every completed order.'|t('zo'),
+    id: 'eligibleStatusHandles',
+    name: 'eligibleStatusHandles',
+    options: statusOptions,
+    values: settings.eligibleStatusHandles
+}) }}
+
+{{ forms.textField({
+    label: 'Minimum order total'|t('zo'),
+    instructions: 'Orders below this are skipped. Useful for comped and zero-value orders.'|t('zo'),
+    id: 'minimumOrderTotal',
+    name: 'minimumOrderTotal',
+    value: settings.minimumOrderTotal,
+    size: 8
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Sync through the queue'|t('zo'),
+    instructions: 'Leave this on. Turning it off makes Zoho’s response time part of your checkout’s.'|t('zo'),
+    id: 'syncViaQueue',
+    name: 'syncViaQueue',
+    on: settings.syncViaQueue
+}) }}
+
+{{ forms.textField({
+    label: 'Maximum attempts'|t('zo'),
+    instructions: 'How many times a failing order is retried before it stops being retried automatically.'|t('zo'),
+    id: 'maxAttempts',
+    name: 'maxAttempts',
+    value: settings.maxAttempts,
+    size: 4
+}) }}
+
+{# ------------------------------------------------------------------ #}
+<hr>
+<h2>{{ 'Documents'|t('zo') }}</h2>
+
+{{ forms.selectField({
+    label: 'Document type'|t('zo'),
+    instructions: 'Sales orders cannot receive payments, so a sales-order-only store records no receipts in Zoho.'|t('zo'),
+    id: 'documentType',
+    name: 'documentType',
+    value: settings.documentType,
+    options: [
+        { label: 'Invoice'|t('zo'), value: 'invoice' },
+        { label: 'Sales order (Pro)'|t('zo'), value: 'salesorder' },
+        { label: 'Both (Pro)'|t('zo'), value: 'both' }
+    ]
+}) }}
+
+{{ forms.selectField({
+    label: 'Invoice number'|t('zo'),
+    instructions: 'Sequential numbering is a legal requirement in some jurisdictions. Letting Zoho number its own documents keeps its sequence unbroken; sending Craft’s makes the two systems match at a glance.'|t('zo'),
+    id: 'invoiceNumberSource',
+    name: 'invoiceNumberSource',
+    value: settings.invoiceNumberSource,
+    options: [
+        { label: 'Let Zoho Books number it'|t('zo'), value: 'zoho' },
+        { label: 'Order reference'|t('zo'), value: 'reference' },
+        { label: 'Order number'|t('zo'), value: 'number' },
+        { label: 'Short order number'|t('zo'), value: 'shortNumber' }
+    ]
+}) }}
+
+{{ forms.selectField({
+    label: 'Reference number'|t('zo'),
+    instructions: 'What lands in Zoho’s own reference field.'|t('zo'),
+    id: 'referenceSource',
+    name: 'referenceSource',
+    value: settings.referenceSource,
+    options: [
+        { label: 'Order reference'|t('zo'), value: 'reference' },
+        { label: 'Order number'|t('zo'), value: 'number' },
+        { label: 'Short order number'|t('zo'), value: 'shortNumber' },
+        { label: 'Order ID'|t('zo'), value: 'id' }
+    ]
+}) }}
+
+{{ forms.textField({
+    label: 'Payment terms (days)'|t('zo'),
+    instructions: '0 means due on receipt.'|t('zo'),
+    id: 'paymentTermsDays',
+    name: 'paymentTermsDays',
+    value: settings.paymentTermsDays,
+    size: 4
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Mark invoices as sent'|t('zo'),
+    instructions: 'A draft invoice is invisible to Zoho’s ageing reports. Leave this on unless you review every invoice by hand.'|t('zo'),
+    id: 'markInvoiceSent',
+    name: 'markInvoiceSent',
+    on: settings.markInvoiceSent
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Have Zoho email the invoice'|t('zo'),
+    instructions: 'Off by default — Commerce has already emailed the customer, and two receipts for one purchase generates support tickets.'|t('zo'),
+    id: 'emailInvoice',
+    name: 'emailInvoice',
+    on: settings.emailInvoice
+}) }}
+
+{{ forms.textareaField({
+    label: 'Invoice notes'|t('zo'),
+    instructions: 'An object template, rendered against the order. e.g. `Ordered {{ object.dateOrdered|date(\'d M Y\') }}`'|t('zo'),
+    id: 'invoiceNotes',
+    name: 'invoiceNotes',
+    value: settings.invoiceNotes,
+    rows: 2,
+    class: 'code'
+}) }}
+
+{{ forms.textareaField({
+    label: 'Invoice terms'|t('zo'),
+    id: 'invoiceTerms',
+    name: 'invoiceTerms',
+    value: settings.invoiceTerms,
+    rows: 2,
+    class: 'code'
+}) }}
+
+{{ forms.editableTableField({
+    label: 'Custom fields (Pro)'|t('zo'),
+    instructions: 'Zoho custom fields to fill. Use the API name (`cf_purchase_order`) or the visible label. Values are object templates rendered against the order.'|t('zo'),
+    id: 'customFields',
+    name: 'customFields',
+    cols: {
+        field: { heading: 'Zoho field'|t('zo'), type: 'singleline', code: true },
+        template: { heading: 'Template'|t('zo'), type: 'singleline', code: true }
+    },
+    rows: customFieldRows,
+    addRowLabel: 'Add a field'|t('zo'),
+    allowAdd: true,
+    allowDelete: true,
+    allowReorder: true
+}) }}
+
+{# ------------------------------------------------------------------ #}
+<hr>
+<h2>{{ 'Line items'|t('zo') }}</h2>
+
+{{ forms.lightswitchField({
+    label: 'Create Zoho items for products (Pro)'|t('zo'),
+    instructions: 'Links each line to a Zoho item, so Zoho’s sales-by-item reports work. Existing items are matched, never duplicated.'|t('zo'),
+    id: 'syncItems',
+    name: 'syncItems',
+    on: settings.syncItems
+}) }}
+
+{{ forms.selectField({
+    label: 'Match existing items by'|t('zo'),
+    id: 'itemMatchBy',
+    name: 'itemMatchBy',
+    value: settings.itemMatchBy,
+    options: [
+        { label: 'SKU'|t('zo'), value: 'sku' },
+        { label: 'Name'|t('zo'), value: 'name' }
+    ]
+}) }}
+
+{{ forms.textField({
+    label: 'Line description'|t('zo'),
+    instructions: 'An object template rendered against each line item.'|t('zo'),
+    id: 'lineDescriptionTemplate',
+    name: 'lineDescriptionTemplate',
+    value: settings.lineDescriptionTemplate,
+    class: 'code'
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Send shipping as a shipping charge'|t('zo'),
+    id: 'includeShipping',
+    name: 'includeShipping',
+    on: settings.includeShipping
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Send discounts as an invoice-level discount'|t('zo'),
+    id: 'includeDiscount',
+    name: 'includeDiscount',
+    on: settings.includeDiscount
+}) }}
+
+{# ------------------------------------------------------------------ #}
+<hr>
+<h2>{{ 'Tax'|t('zo') }}</h2>
+
+<div class="pane">
+    <p>
+        {{ 'Commerce and Zoho Books both know how to calculate tax, and they will not always agree. Whichever you choose, Zo compares the total Zoho returns against the total the customer actually paid and flags any difference.'|t('zo') }}
+    </p>
+</div>
+
+{{ forms.selectField({
+    label: 'Tax handling'|t('zo'),
+    id: 'taxMode',
+    name: 'taxMode',
+    value: settings.taxMode,
+    options: [
+        { label: 'Commerce is the source of truth (recommended)'|t('zo'), value: 'adjustment' },
+        { label: 'Let Zoho calculate from mapped rates (Pro)'|t('zo'), value: 'mapped' },
+        { label: 'No tax'|t('zo'), value: 'none' }
+    ],
+    instructions: 'The first sends the tax Commerce charged as an adjustment, so the invoice total matches the payment to the cent. The second gives Zoho proper tax records but lets the two totals drift.'|t('zo')
+}) }}
+
+{{ forms.textField({
+    label: 'Adjustment description'|t('zo'),
+    instructions: 'What the adjustment line is called on the invoice.'|t('zo'),
+    id: 'adjustmentDescription',
+    name: 'adjustmentDescription',
+    value: settings.adjustmentDescription
+}) }}
+
+{{ forms.editableTableField({
+    label: 'Tax mapping (Pro)'|t('zo'),
+    instructions: 'Commerce tax category → Zoho tax ID. Only used in “let Zoho calculate” mode.'|t('zo'),
+    id: 'taxMap',
+    name: 'taxMap',
+    cols: {
+        category: { heading: 'Tax category'|t('zo'), type: 'select', options: taxCategoryOptions },
+        taxId: { heading: 'Zoho tax ID'|t('zo'), type: 'singleline', code: true }
+    },
+    rows: taxMapRows,
+    addRowLabel: 'Add a mapping'|t('zo'),
+    allowAdd: true,
+    allowDelete: true,
+    allowReorder: false
+}) }}
+
+<p>
+    <button type="button" class="btn small" id="zo-taxes">{{ 'Look up Zoho tax IDs'|t('zo') }}</button>
+    <span id="zo-taxes-note" class="light"></span>
+</p>
+
+{{ forms.textField({
+    label: 'Variance tolerance'|t('zo'),
+    instructions: 'How much disagreement between the two totals is treated as rounding rather than a problem.'|t('zo'),
+    id: 'varianceTolerance',
+    name: 'varianceTolerance',
+    value: settings.varianceTolerance,
+    size: 8
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Treat a variance as a failed sync'|t('zo'),
+    instructions: 'Off by default. The invoice does exist in Zoho either way, and marking the order unsynced invites somebody to create a second one.'|t('zo'),
+    id: 'blockOnVariance',
+    name: 'blockOnVariance',
+    on: settings.blockOnVariance
+}) }}
+
+{# ------------------------------------------------------------------ #}
+<hr>
+<h2>{{ 'Customers'|t('zo') }}</h2>
+
+{{ forms.lightswitchField({
+    label: 'Reuse an existing Zoho contact with the same email'|t('zo'),
+    instructions: 'Leave this on when connecting a store that has been trading. Off, every existing customer gets a second contact.'|t('zo'),
+    id: 'reuseContactByEmail',
+    name: 'reuseContactByEmail',
+    on: settings.reuseContactByEmail
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Update the Zoho contact on every sync'|t('zo'),
+    instructions: 'Pushes name and address changes back. Off by default, so edits made in Zoho are not overwritten by an old order.'|t('zo'),
+    id: 'updateContactOnSync',
+    name: 'updateContactOnSync',
+    on: settings.updateContactOnSync
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Treat orders with a company name as business customers'|t('zo'),
+    id: 'inferBusinessCustomers',
+    name: 'inferBusinessCustomers',
+    on: settings.inferBusinessCustomers
+}) }}
+
+{{ forms.textField({
+    label: 'Phone field handle'|t('zo'),
+    instructions: 'Craft 5 addresses have no native phone field. If you added a custom one, name it here.'|t('zo'),
+    id: 'phoneFieldHandle',
+    name: 'phoneFieldHandle',
+    value: settings.phoneFieldHandle,
+    class: 'code'
+}) }}
+
+{# ------------------------------------------------------------------ #}
+<hr>
+<h2>{{ 'Payments and refunds (Pro)'|t('zo') }}</h2>
+
+{{ forms.lightswitchField({
+    label: 'Record payments in Zoho Books'|t('zo'),
+    id: 'syncPayments',
+    name: 'syncPayments',
+    on: settings.syncPayments
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Record refunds as credit notes'|t('zo'),
+    instructions: 'Zoho only refunds an unapplied payment, so a refund on a paid invoice is a credit note — which is also what an accountant expects to see.'|t('zo'),
+    id: 'syncRefunds',
+    name: 'syncRefunds',
+    on: settings.syncRefunds
+}) }}
+
+{{ forms.selectField({
+    label: 'Default payment mode'|t('zo'),
+    instructions: 'Zoho’s vocabulary is fixed. Anything outside it is rejected.'|t('zo'),
+    id: 'defaultPaymentMode',
+    name: 'defaultPaymentMode',
+    value: settings.defaultPaymentMode,
+    options: paymentModeOptions
+}) }}
+
+{{ forms.editableTableField({
+    label: 'Gateway → payment mode'|t('zo'),
+    id: 'paymentModeMap',
+    name: 'paymentModeMap',
+    cols: {
+        gateway: { heading: 'Gateway'|t('zo'), type: 'select', options: gatewayOptions },
+        mode: { heading: 'Zoho payment mode'|t('zo'), type: 'select', options: paymentModeOptions }
+    },
+    rows: paymentModeRows,
+    addRowLabel: 'Add a mapping'|t('zo'),
+    allowAdd: true,
+    allowDelete: true,
+    allowReorder: false
+}) }}
+
+<div class="field">
+    {{ forms.text({
+        id: 'depositAccountId',
+        name: 'depositAccountId',
+        value: settings.depositAccountId,
+        class: 'code'
+    }) }}
+    <div class="heading" style="margin-top: 4px;">
+        <button type="button" class="btn small" id="zo-accounts">{{ 'Look up accounts'|t('zo') }}</button>
+        <span id="zo-accounts-note" class="light"></span>
+    </div>
+    <div class="instructions">
+        <p>{{ 'Deposit account — where payments land, and where refunds are paid from. Zoho requires an account for a refund and offers no default, so without one the credit note is created but the cash movement is not.'|t('zo') }}</p>
+    </div>
+</div>
+
+{# ------------------------------------------------------------------ #}
+<hr>
+<h2>{{ 'Transport and logging'|t('zo') }}</h2>
+
+{{ forms.textField({
+    label: 'Requests per minute'|t('zo'),
+    instructions: 'Zoho allows 100 per organization per minute and enforces it by locking the account out. Staying under leaves headroom for anything else using the same account.'|t('zo'),
+    id: 'requestsPerMinute',
+    name: 'requestsPerMinute',
+    value: settings.requestsPerMinute,
+    size: 4
+}) }}
+
+{{ forms.textField({
+    label: 'Rate limit wait (seconds)'|t('zo'),
+    instructions: 'How long a call waits for a free slot before giving up and retrying later.'|t('zo'),
+    id: 'rateLimitWaitSeconds',
+    name: 'rateLimitWaitSeconds',
+    value: settings.rateLimitWaitSeconds,
+    size: 4
+}) }}
+
+{{ forms.textField({
+    label: 'Request timeout (seconds)'|t('zo'),
+    id: 'requestTimeout',
+    name: 'requestTimeout',
+    value: settings.requestTimeout,
+    size: 4
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Log Zoho requests'|t('zo'),
+    id: 'loggingEnabled',
+    name: 'loggingEnabled',
+    on: settings.loggingEnabled
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Keep request and response bodies (Pro)'|t('zo'),
+    instructions: 'Credentials are redacted before anything is written.'|t('zo'),
+    id: 'logPayloads',
+    name: 'logPayloads',
+    on: settings.logPayloads
+}) }}
+
+{{ forms.textField({
+    label: 'Log retention (days)'|t('zo'),
+    instructions: '0 keeps everything. Lite always keeps 7 days.'|t('zo'),
+    id: 'logRetentionDays',
+    name: 'logRetentionDays',
+    value: settings.logRetentionDays,
+    size: 4
+}) }}
+
+{# ------------------------------------------------------------------ #}
+<hr>
+<h2>{{ 'Preview'|t('zo') }}</h2>
+
+<div class="pane">
+    <p>{{ 'The exact JSON your most recent completed order would be sent as, built by the same code the sync uses.'|t('zo') }}</p>
+    <p>
+        <button type="button" class="btn" id="zo-preview">{{ 'Preview payload'|t('zo') }}</button>
+        <span id="zo-preview-note" class="light"></span>
+    </p>
+    <pre id="zo-preview-out" class="code" style="display:none; max-height: 340px; overflow: auto; background: #f7f8f9; padding: 10px; border-radius: 4px;"></pre>
+</div>
+
+{% js %}
+(function() {
+    function note(id, message, isError) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = message;
+        el.className = isError ? 'error' : 'light';
+    }
+
+    function bind(id, method, action, handler) {
+        var button = document.getElementById(id);
+        if (!button) return;
+        button.addEventListener('click', function() {
+            note(id + '-note', '…', false);
+            Craft.sendActionRequest(method, action)
+                .then(function(response) { handler(response.data); })
+                .catch(function(e) {
+                    var data = (e.response && e.response.data) || {};
+                    note(id + '-note', data.message || {{ 'That didn’t work.'|t('zo')|json_encode|raw }}, true);
+                });
+        });
+    }
+
+    bind('zo-test', 'POST', 'zo/settings/test-connection', function(data) {
+        note('zo-test-note', data.message, !data.success);
+    });
+
+    bind('zo-orgs', 'GET', 'zo/settings/organizations', function(data) {
+        if (!data.success) { note('zo-orgs-note', data.message, true); return; }
+        var parts = (data.organizations || []).map(function(o) { return o.id + ' — ' + o.name; });
+        note('zo-orgs-note', parts.join(' · ') || {{ 'No organizations found.'|t('zo')|json_encode|raw }}, false);
+    });
+
+    bind('zo-taxes', 'GET', 'zo/settings/taxes', function(data) {
+        if (!data.success) { note('zo-taxes-note', data.message, true); return; }
+        var parts = (data.taxes || []).map(function(t) { return t.id + ' — ' + t.name + ' (' + t.percentage + '%)'; });
+        note('zo-taxes-note', parts.join(' · ') || {{ 'No tax rates found.'|t('zo')|json_encode|raw }}, false);
+    });
+
+    bind('zo-accounts', 'GET', 'zo/settings/accounts', function(data) {
+        if (!data.success) { note('zo-accounts-note', data.message, true); return; }
+        var parts = (data.accounts || []).map(function(a) { return a.id + ' — ' + a.name; });
+        note('zo-accounts-note', parts.join(' · ') || {{ 'No accounts found.'|t('zo')|json_encode|raw }}, false);
+    });
+
+    bind('zo-preview', 'GET', 'zo/settings/preview', function(data) {
+        var out = document.getElementById('zo-preview-out');
+        if (!data.success) { note('zo-preview-note', data.message, true); return; }
+        out.style.display = 'block';
+        out.textContent = data.payload;
+        note(
+            'zo-preview-note',
+            data.orderNumber + ' · ' +
+            (data.matches
+                ? {{ 'totals match'|t('zo')|json_encode|raw }}
+                : {{ 'Zoho would total this differently'|t('zo')|json_encode|raw }}),
+            !data.matches
+        );
+    });
+
+    var disconnect = document.getElementById('zo-disconnect');
+    if (disconnect) {
+        disconnect.addEventListener('click', function() {
+            Craft.sendActionRequest('POST', 'zo/settings/disconnect')
+                .then(function() { window.location.reload(); })
+                .catch(function() { note('zo-test-note', {{ 'Couldn’t disconnect.'|t('zo')|json_encode|raw }}, true); });
+        });
+    }
+})();
+{% endjs %}

@@ -1,0 +1,92 @@
+{% extends '_layouts/cp' %}
+{% import '_includes/forms' as forms %}
+
+{% set title = 'Log'|t('zo') %}
+{% set selectedSubnavItem = 'log' %}
+
+{% block content %}
+    <div class="pane">
+        <form method="get" action="{{ url('zo/log') }}" class="flex" style="gap: 10px; align-items: flex-end;">
+            {{ forms.select({
+                name: 'level',
+                value: level,
+                options: [{ label: 'All levels'|t('zo'), value: '' }]|merge(
+                    levels|map(l => { label: l|capitalize, value: l })
+                )
+            }) }}
+            {{ forms.text({ name: 'action', value: action, placeholder: 'Action'|t('zo') }) }}
+            <button type="submit" class="btn">{{ 'Filter'|t('zo') }}</button>
+            <button type="button" class="btn" id="zo-log-clear">{{ 'Clear log'|t('zo') }}</button>
+        </form>
+    </div>
+
+    {% if not isPro %}
+        <div class="pane">
+            <p class="light">{{ 'On Lite the log keeps summaries for seven days. Pro keeps the full request and response bodies for as long as you configure.'|t('zo') }}</p>
+        </div>
+    {% endif %}
+
+    {% if entries|length %}
+        <table class="data fullwidth collapsible">
+            <thead>
+            <tr>
+                <th></th>
+                <th>{{ 'Action'|t('zo') }}</th>
+                <th>{{ 'Endpoint'|t('zo') }}</th>
+                <th>{{ 'Status'|t('zo') }}</th>
+                <th>{{ 'Summary'|t('zo') }}</th>
+                <th class="rightalign">{{ 'Time'|t('zo') }}</th>
+                <th>{{ 'When'|t('zo') }}</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for entry in entries %}
+                <tr>
+                    <td class="thin">
+                        <span class="status {{ entry.level == 'error' ? 'red' : (entry.level == 'warning' ? 'orange' : 'green') }}"></span>
+                    </td>
+                    <td><a href="{{ url('zo/log/' ~ entry.id) }}">{{ entry.action }}</a></td>
+                    <td class="code smalltext">{{ entry.method }} {{ entry.endpoint|replace({'https://': ''})|slice(0, 60) }}</td>
+                    <td>
+                        {{ entry.statusCode ?: '' }}
+                        {% if entry.zohoCode is not null and entry.zohoCode != 0 %}
+                            <span class="light">/ {{ entry.zohoCode }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ entry.summary }}</td>
+                    <td class="rightalign light">{{ entry.durationMs ? entry.durationMs ~ 'ms' : '' }}</td>
+                    <td>{{ entry.dateCreated ? entry.dateCreated|datetime('short') : '' }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        {% set pages = (total / perPage)|round(0, 'ceil') %}
+        {% if pages > 1 %}
+            <div class="pane" style="margin-top: 12px;">
+                {% for p in 1..min(pages, 40) %}
+                    {% if p == page %}
+                        <strong style="padding: 0 4px;">{{ p }}</strong>
+                    {% else %}
+                        <a style="padding: 0 4px;" href="{{ url('zo/log', { level: level, action: action, page: p }) }}">{{ p }}</a>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="pane"><p class="light">{{ 'Nothing logged yet.'|t('zo') }}</p></div>
+    {% endif %}
+{% endblock %}
+
+{% js %}
+(function() {
+    var clear = document.getElementById('zo-log-clear');
+    if (!clear) return;
+    clear.addEventListener('click', function() {
+        if (!confirm({{ 'Delete every log entry?'|t('zo')|json_encode|raw }})) return;
+        Craft.sendActionRequest('POST', 'zo/log/clear')
+            .then(function() { window.location.reload(); })
+            .catch(function() { Craft.cp.displayError({{ 'Couldn’t clear the log.'|t('zo')|json_encode|raw }}); });
+    });
+})();
+{% endjs %}

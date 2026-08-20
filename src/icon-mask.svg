@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Zo">
+  <!-- A ledger: the spine on the left, ruled lines behind, and a Z cut through them. -->
+  <path d="M18 12h58a8 8 0 0 1 8 8v60a8 8 0 0 1-8 8H18a8 8 0 0 1-8-8V20a8 8 0 0 1 8-8Z"
+        fill="none" stroke="currentColor" stroke-width="6"/>
+  <path d="M26 12v76" fill="none" stroke="currentColor" stroke-width="5" opacity=".55"/>
+  <path d="M38 66h34" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" opacity=".45"/>
+  <path d="M38 30h34l-30 26h30"
+        fill="none" stroke="currentColor" stroke-width="7"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
