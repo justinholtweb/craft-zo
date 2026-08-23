@@ -46,23 +46,9 @@ class Plugin extends BasePlugin
 {
     public const HANDLE = 'zo';
 
-    public const EDITION_LITE = 'lite';
-    public const EDITION_PRO = 'pro';
-
     public string $schemaVersion = '5.0.0';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
-
-    /**
-     * @inheritdoc
-     */
-    public static function editions(): array
-    {
-        return [
-            self::EDITION_LITE,
-            self::EDITION_PRO,
-        ];
-    }
 
     /**
      * @inheritdoc
@@ -111,11 +97,6 @@ class Plugin extends BasePlugin
     {
         return class_exists(\craft\commerce\Plugin::class)
             && Craft::$app->getPlugins()->isPluginEnabled('commerce');
-    }
-
-    public function isPro(): bool
-    {
-        return $this->is(self::EDITION_PRO, '>=');
     }
 
     public function getApi(): Api
@@ -465,11 +446,6 @@ class Plugin extends BasePlugin
             Transactions::EVENT_AFTER_SAVE_TRANSACTION,
             static function(TransactionEvent $event) {
                 $plugin = Plugin::getInstance();
-
-                if (!$plugin->isPro()) {
-                    return;
-                }
-
                 $settings = $plugin->getSettings();
                 $transaction = $event->transaction;
 
@@ -518,7 +494,6 @@ class Plugin extends BasePlugin
             return Craft::$app->getView()->renderTemplate('zo/_order-panel', [
                 'order' => $order,
                 'status' => $this->getSync()->getOrderStatus($order),
-                'isPro' => $this->isPro(),
                 'canSync' => Craft::$app->getUser()->checkPermission('zo-syncOrders'),
                 'canManage' => Craft::$app->getUser()->checkPermission('zo-manageLinks'),
                 'tolerance' => $this->getSettings()->varianceTolerance,

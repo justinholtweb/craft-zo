@@ -49,15 +49,11 @@
             </div>
         </div>
 
-        {% if canSync and isPro and unsynced.count %}
+        {% if canSync and unsynced.count %}
             <div style="margin-top: 14px;">
                 <button type="button" class="btn submit" id="zo-backfill">{{ 'Backfill everything'|t('zo') }}</button>
                 <span id="zo-backfill-note" class="light"></span>
             </div>
-        {% elseif canSync and not isPro and unsynced.count %}
-            <p class="light" style="margin-top: 14px;">
-                {{ 'Backfilling past orders in bulk is a Pro feature. On Lite, sync them one at a time from each order.'|t('zo') }}
-            </p>
         {% endif %}
     </div>
 

@@ -4,21 +4,11 @@
    looks perfect, Craft reports “Plugin settings saved”, and every edit is silently discarded. #}
 {% import '_includes/forms' as forms %}
 
-{% set isPro = plugin.isPro() %}
 {% set connected = settings.getIsConnected() %}
 
 {% if not commerceReady %}
     <div class="pane">
         <p class="error">{{ 'Craft Commerce is not installed or enabled. Zo needs it to do anything.'|t('zo') }}</p>
-    </div>
-{% endif %}
-
-{% if not isPro %}
-    <div class="pane" style="border-left: 3px solid #cdd8e4;">
-        <p>
-            <strong>{{ 'You’re running Zo Lite.'|t('zo') }}</strong>
-            {{ 'Payments, refunds, item sync, sales orders, mapped tax, custom fields, backfill and the log payloads are Pro features. Their settings are shown below but have no effect until you upgrade.'|t('zo') }}
-        </p>
     </div>
 {% endif %}
 
@@ -550,7 +540,7 @@
 
 {{ forms.textField({
     label: 'Log retention (days)'|t('zo'),
-    instructions: '0 keeps everything. Lite always keeps 7 days.'|t('zo'),
+    instructions: '0 keeps everything.'|t('zo'),
     id: 'logRetentionDays',
     name: 'logRetentionDays',
     value: settings.logRetentionDays,

@@ -98,7 +98,6 @@ if (($originalSettings['clientId'] ?? null) === 'fixture-client') {
     $originalSettings['paymentModeMap'] = [];
     $originalSettings['adjustmentDescription'] = 'Sales tax';
 }
-$originalEdition = Craft::$app->getPlugins()->getPluginInfo(Plugin::HANDLE)['edition'] ?? Plugin::EDITION_LITE;
 
 // `craft-penny` (a sibling plugin in this shared harness) registers an
 // Elements::EVENT_BEFORE_SAVE_ELEMENT handler typed `ModelEvent`, but Craft passes an
@@ -107,17 +106,6 @@ $originalEdition = Craft::$app->getPlugins()->getPluginInfo(Plugin::HANDLE)['edi
 if (Craft::$app->getPlugins()->isPluginEnabled('penny')) {
     yii\base\Event::off(craft\services\Elements::class, craft\services\Elements::EVENT_BEFORE_SAVE_ELEMENT);
     echo "  ! detached craft-penny's broken beforeSaveElement handler for this run\n";
-}
-
-/**
- * Editions are project config, so switching one has to be flushed like any other config write.
- */
-function switchEdition(string $edition): void
-{
-    refreshConfigVersion();
-    Craft::$app->getPlugins()->switchEdition(Plugin::HANDLE, $edition);
-    Craft::$app->getProjectConfig()->saveModifiedConfigData();
-    refreshConfigVersion();
 }
 
 /**
@@ -425,7 +413,6 @@ function clearLinks(): void
 }
 
 try {
-    switchEdition(Plugin::EDITION_PRO);
     setSettings($originalSettings);
 
     // Completing a fixture order fires Zo's own order-complete handler, which queues a real sync
@@ -1624,67 +1611,46 @@ try {
     });
 
     // =====================================================================
-    section('Lite');
+    section('One edition');
 
-    switchEdition(Plugin::EDITION_LITE);
+    check('the plugin declares a single edition', function() {
+        // Craft falls back to the first edition when a stored one is unknown, so an install that
+        // predates this still loads — but a second edition reappearing here is a regression.
+        $editions = Plugin::editions();
 
-    check('Lite forces the log retention down', function() use ($plugin) {
-        setSettings(['logRetentionDays' => 365]);
-
-        return Plugin::getInstance()->getSettings()->getEffectiveLogRetentionDays() === 7;
+        return count($editions) === 1 ?: 'editions: ' . implode(', ', $editions);
     });
 
-    check('Lite falls back from mapped tax to the reconciling mode', function() {
-        setSettings(['taxMode' => Settings::TAX_MODE_MAPPED]);
-        $mode = Plugin::getInstance()->getSettings()->getEffectiveTaxMode();
-        setSettings(['taxMode' => Settings::TAX_MODE_ADJUSTMENT]);
+    check('item sync runs when it is switched on', function() use ($variant) {
+        clearLinks();
+        resetRateLimiter();
+        setSettings(['syncItems' => true, 'itemMatchBy' => 'sku']);
+        Plugin::getInstance()->getAuth()->forgetAccessToken();
+        mockZoho([
+            tokenResponse(),
+            zohoOk(['items' => []], 200),
+            zohoOk(['item' => ['item_id' => '77001', 'name' => 'Fixture item']]),
+        ]);
 
-        return $mode === Settings::TAX_MODE_ADJUSTMENT ?: $mode;
-    });
-
-    check('Lite never issues a sales order', function() {
-        setSettings(['documentType' => Settings::DOCUMENT_BOTH]);
-        $type = Plugin::getInstance()->getSettings()->getEffectiveDocumentType();
-        setSettings(['documentType' => Settings::DOCUMENT_INVOICE]);
-
-        return $type === Settings::DOCUMENT_INVOICE ?: $type;
-    });
-
-    check('Lite skips item sync even when it is switched on', function() use ($variant) {
-        setSettings(['syncItems' => true]);
         $order = makeOrder([['variant' => $variant, 'qty' => 1]]);
         $ids = Plugin::getInstance()->getItems()->syncForOrder($order);
+
         setSettings(['syncItems' => false]);
+        clearMock();
 
-        return $ids === [];
+        return $ids === [$variant->id => '77001'] ?: json_encode($ids);
     });
 
-    check('Lite drops custom fields from the payload', function() use ($variant) {
-        $order = makeOrder([['variant' => $variant, 'qty' => 1]]);
-        Plugin::getInstance()->getSettings()->setCustomFields([['field' => 'cf_x', 'template' => 'y']]);
-        $payload = Plugin::getInstance()->getDocuments()->buildInvoicePayload($order, '1');
-        Plugin::getInstance()->getSettings()->setCustomFields([]);
-
-        return !isset($payload['custom_fields']);
-    });
-
-    check('Lite keeps no payload bodies in the log', function() {
-        $plugin = Plugin::getInstance();
+    check('the log keeps request and response bodies', function() use ($plugin) {
         $plugin->getLog()->clear();
         setSettings(['loggingEnabled' => true, 'logPayloads' => true]);
-        $plugin->getLog()->write('lite-payload', ['request' => '{"a":1}', 'response' => '{"b":2}']);
+        $plugin->getLog()->write('payload-check', ['request' => '{"a":1}', 'response' => '{"b":2}']);
 
-        $entries = $plugin->getLog()->getEntries(['action' => 'lite-payload'], 1);
+        $entries = $plugin->getLog()->getEntries(['action' => 'payload-check'], 1);
         $entry = $plugin->getLog()->getEntryById($entries[0]->id);
 
-        return $entry->request === null && $entry->response === null
+        return ($entry->request === '{"a":1}' && $entry->response === '{"b":2}')
             ?: json_encode([$entry->request, $entry->response]);
-    });
-
-    check('switching back to Pro restores the Pro behaviour', function() {
-        switchEdition(Plugin::EDITION_PRO);
-
-        return Plugin::getInstance()->isPro() === true;
     });
 } finally {
     section('Cleanup');
@@ -1731,12 +1697,6 @@ try {
         applySettings($originalSettings);
     } catch (Throwable $e) {
         echo "  ! could not restore settings: {$e->getMessage()}\n";
-    }
-
-    try {
-        switchEdition($originalEdition);
-    } catch (Throwable $e) {
-        echo "  ! could not restore the plugin edition: {$e->getMessage()}\n";
     }
 
     echo "  ✓ fixtures removed, settings restored\n";

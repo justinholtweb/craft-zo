@@ -11,7 +11,6 @@ use craft\web\Controller;
 use justinholtweb\zo\jobs\BackfillJob;
 use justinholtweb\zo\models\Link;
 use justinholtweb\zo\Plugin;
-use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
 use yii\web\Response;
 
@@ -75,7 +74,6 @@ class SyncController extends Controller
             'status' => $status,
             'search' => $search,
             'settings' => $plugin->getSettings(),
-            'isPro' => $plugin->isPro(),
             'canSync' => Craft::$app->getUser()->checkPermission('zo-syncOrders'),
             'canManage' => Craft::$app->getUser()->checkPermission('zo-manageLinks'),
             'unsynced' => $plugin->getSync()->countUnsyncedOrders(),
@@ -169,10 +167,6 @@ class SyncController extends Controller
     {
         $this->requirePostRequest();
         $this->requirePermission('zo-syncOrders');
-
-        if (!Plugin::getInstance()->isPro()) {
-            throw new ForbiddenHttpException('Backfill is a Pro feature.');
-        }
 
         $since = trim((string)Craft::$app->getRequest()->getBodyParam('since', ''));
 

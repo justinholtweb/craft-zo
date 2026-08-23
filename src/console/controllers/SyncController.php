@@ -200,8 +200,7 @@ class SyncController extends Controller
         $this->stdout('  Connected      ' . ($settings->getIsConnected() ? 'yes' : 'no') . PHP_EOL);
         $this->stdout('  Data centre    ' . $settings->getSafeDataCenter() . PHP_EOL);
         $this->stdout('  Organization   ' . ($settings->getParsedOrganizationId() ?: '—') . PHP_EOL);
-        $this->stdout('  Edition        ' . ($plugin->isPro() ? 'Pro' : 'Lite') . PHP_EOL);
-        $this->stdout('  Tax mode       ' . $settings->getEffectiveTaxMode() . PHP_EOL);
+        $this->stdout('  Tax mode       ' . $settings->taxMode . PHP_EOL);
         $this->stdout(PHP_EOL . 'Documents' . PHP_EOL, Console::FG_CYAN);
         $this->stdout('  Synced         ' . $stats['synced'] . PHP_EOL);
         $this->stdout('  Pending        ' . $stats['pending'] . PHP_EOL);

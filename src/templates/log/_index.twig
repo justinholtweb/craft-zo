@@ -20,12 +20,6 @@
         </form>
     </div>
 
-    {% if not isPro %}
-        <div class="pane">
-            <p class="light">{{ 'On Lite the log keeps summaries for seven days. Pro keeps the full request and response bodies for as long as you configure.'|t('zo') }}</p>
-        </div>
-    {% endif %}
-
     {% if entries|length %}
         <table class="data fullwidth collapsible">
             <thead>

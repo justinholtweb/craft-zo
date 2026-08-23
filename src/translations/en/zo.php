@@ -7,7 +7,7 @@
  * translators one list to work from rather than a grep of the source.
  */
 return [
-    '0 keeps everything. Lite always keeps 7 days.' => '0 keeps everything. Lite always keeps 7 days.',
+    '0 keeps everything.' => '0 keeps everything.',
     '0 means due on receipt.' => '0 means due on receipt.',
     'A draft invoice is invisible to Zoho’s ageing reports. Leave this on unless you review every invoice by hand.' => 'A draft invoice is invisible to Zoho’s ageing reports. Leave this on unless you review every invoice by hand.',
     'Access was denied in Zoho.' => 'Access was denied in Zoho.',
@@ -29,7 +29,6 @@ return [
     'Backfill everything' => 'Backfill everything',
     'Backfill queued.' => 'Backfill queued.',
     'Backfilling orders to Zoho Books' => 'Backfilling orders to Zoho Books',
-    'Backfilling past orders in bulk is a Pro feature. On Lite, sync them one at a time from each order.' => 'Backfilling past orders in bulk is a Pro feature. On Lite, sync them one at a time from each order.',
     'Bank remittance' => 'Bank remittance',
     'Bank transfer' => 'Bank transfer',
     'Both (Pro)' => 'Both (Pro)',
@@ -125,7 +124,6 @@ return [
     'Nothing logged yet.' => 'Nothing logged yet.',
     'Off by default — Commerce has already emailed the customer, and two receipts for one purchase generates support tickets.' => 'Off by default — Commerce has already emailed the customer, and two receipts for one purchase generates support tickets.',
     'Off by default. The invoice does exist in Zoho either way, and marking the order unsynced invites somebody to create a second one.' => 'Off by default. The invoice does exist in Zoho either way, and marking the order unsynced invites somebody to create a second one.',
-    'On Lite the log keeps summaries for seven days. Pro keeps the full request and response bodies for as long as you configure.' => 'On Lite the log keeps summaries for seven days. Pro keeps the full request and response bodies for as long as you configure.',
     'Only sync orders in these statuses' => 'Only sync orders in these statuses',
     'Order' => 'Order',
     'Order ID' => 'Order ID',
@@ -140,7 +138,6 @@ return [
     'Payment' => 'Payment',
     'Payment terms (days)' => 'Payment terms (days)',
     'Payments and refunds (Pro)' => 'Payments and refunds (Pro)',
-    'Payments, refunds, item sync, sales orders, mapped tax, custom fields, backfill and the log payloads are Pro features. Their settings are shown below but have no effect until you upgrade.' => 'Payments, refunds, item sync, sales orders, mapped tax, custom fields, backfill and the log payloads are Pro features. Their settings are shown below but have no effect until you upgrade.',
     'Pending' => 'Pending',
     'Phone field handle' => 'Phone field handle',
     'Preview' => 'Preview',
@@ -159,7 +156,6 @@ return [
     'Refund on Craft Commerce order {number}' => 'Refund on Craft Commerce order {number}',
     'Register this in the Zoho API console, exactly as shown. Zoho matches it character for character.' => 'Register this in the Zoho API console, exactly as shown. Zoho matches it character for character.',
     'Request' => 'Request',
-    'Request and response bodies are a Pro feature.' => 'Request and response bodies are a Pro feature.',
     'Request timeout (seconds)' => 'Request timeout (seconds)',
     'Requests per minute' => 'Requests per minute',
     'Response' => 'Response',
@@ -232,7 +228,6 @@ return [
     'What lands in Zoho’s own reference field.' => 'What lands in Zoho’s own reference field.',
     'What the adjustment line is called on the invoice.' => 'What the adjustment line is called on the invoice.',
     'When' => 'When',
-    'You’re running Zo Lite.' => 'You’re running Zo Lite.',
     'Zo' => 'Zo',
     'Zo connected, but the refresh token could not be saved.' => 'Zo connected, but the refresh token could not be saved.',
     'Zo held this call back to stay under Zoho’s {limit}-per-minute limit.' => 'Zo held this call back to stay under Zoho’s {limit}-per-minute limit.',

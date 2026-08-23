@@ -4,7 +4,8 @@
 
 Zo pushes Craft Commerce into Zoho Books: customers → contacts, completed orders → invoices,
 payments → customer payments, refunds → credit notes. Distributed as `justinholtweb/craft-zo`.
-**Lite (free) + Pro.**
+**One paid edition: $99, with a $79/year renewal.** Not affiliated with Zoho Corporation;
+the trademark disclaimer is required on the README, the docs and every marketing page.
 
 ## Why it exists
 
@@ -17,6 +18,20 @@ Accounting connectors fail in two expensive ways, and Zo is built around not doi
 2. **Silent drift.** Commerce calculates tax; so does Zoho; they will not always agree. Zo stores
    Commerce's total and Zoho's total side by side on the link and surfaces the difference. If the
    "Not reconciled" count is zero, the books agree with the store.
+
+## One edition
+
+Zo has **no editions**. `editions()` is not declared, there is no `isPro()`, and nothing in the
+codebase is gated: every install gets payments, refunds, item sync, sales orders, mapped tax,
+custom fields, backfill and the full log.
+
+This was a Lite/Pro split until the pricing was settled. If you are reading an old branch: Craft
+falls back to the first entry of `editions()` when an install's stored edition is unknown
+(`Plugins::createPlugin`), so a project config still carrying `edition: pro` loads as `standard`
+rather than erroring — which is why collapsing the split needed no migration.
+
+Reintroducing a second edition means reintroducing a gate in ten files. `check('the plugin
+declares a single edition')` exists to make that a deliberate act rather than a drift.
 
 ## Tech Stack
 
@@ -130,13 +145,58 @@ credit-notes, creditnotes/refunds.
 See `[[craft-plugin-gotchas]]` for family-wide traps, and `[[project_craft_freshh]]` — the
 FreshBooks sibling — for the same architecture against a different API.
 
+## Docs and the marketing site
+
+`docs/*.md` is the **source of truth** for the marketing site at
+[justinholt.com/plugins/craft-zo](https://justinholt.com/plugins/craft-zo). The site does not
+author its own copy — `ddev exec php craft pluginsite/docs/sync craft-zo` (run from
+`~/Sites/justinholt`) reads this directory and writes both the entries and a committed seed.
+
+Every file needs YAML front matter with at least a `title`; a file without it is skipped, which is
+how a design note stays off the site. A page deleted here is deleted from the site on the next
+sync.
+
+The page itself — hero, features, FAQ, CTA — lives in
+`justinholt/scripts/seed/plugin-pages/craft-zo.json`, not here.
+
+**A price change touches more places than it looks.** All of: this file, `README.md`'s editions
+table, `docs/installation.md`'s editions table, `docs/faq.md`, the page seed
+(`priceLabel`/`priceValue`/`renewalPrice`/`pricingModel` and any band copy quoting a figure), the promo cover
+badge in `promos/slides.html` — and the **Craft Console listing**, where the actual prices live at
+`id.craftcms.com` rather than in any repo. That last one is the one that silently disagrees with
+everything else.
+
+## Plugin Store promos
+
+`promos/` renders the seven 1920×1080 marketing images for the Plugin Store listing:
+
+```sh
+./promos/build.sh          # all slides
+./promos/build.sh "2 5"    # just those two
+```
+
+They live **in this repo**, not in a website repo. Plugin marketing sites are now pages inside the
+justinholt.com install rather than standalone projects, so there is no `craft-zo-website/` for them
+to sit in — and they are a Plugin Store asset anyway, so they belong with the plugin.
+
+Two icon files, and they are not interchangeable:
+
+- `src/icon.svg` is the **control panel** icon — monochrome `currentColor` line art, because Craft
+  renders it as a mask.
+- `promos/assets/icon.svg` is the **Plugin Store tile** — the accent square with the mark in white,
+  the shape the rest of the plugin family uses. `justinholt/web/images/plugins/zo.svg` is a copy of
+  this one, not of `src/icon.svg`.
+- `promos/assets/watermark.svg` is ruled ledger lines and the Z at thin strokes. The app icon's own
+  frame is a 6-unit stroke, which at watermark scale is ~70px thick and reads as a hard-edged grey
+  box across every slide. See `promos/README.md`.
+
 ## Testing
 
 No local PHP on this Mac. Everything runs inside the plugin-testing container:
 
 ```sh
 cd ~/Sites/plugin-testing
-ddev exec php /var/www/craft-zo/tests/integration/checks.php   # 110 checks
+ddev exec php /var/www/craft-zo/tests/integration/checks.php   # 106 checks
 ddev exec bash -c 'find /var/www/craft-zo/src -name "*.php" -print0 | xargs -0 -n1 php -l'
 ```
 
@@ -146,8 +206,7 @@ the only way to exercise the answers that matter (a 401 that clears on refresh, 
 carrying a failure code) deterministically. One real round-trip against the local web server
 covers what the mock cannot: a live endpoint answering with HTML.
 
-The suite switches to Pro for the bulk of the run, exercises Lite in its own section, and restores
-the edition, settings, fixtures, link rows, log rows and queued jobs in a `finally`. It also
+The suite restores settings, fixtures, link rows, log rows and queued jobs in a `finally`. It also
 **self-heals**: a run killed before its `finally` leaves `fixture-client` in project config, and
 the next run recognises and clears it rather than snapshotting the pollution as the new original.
 

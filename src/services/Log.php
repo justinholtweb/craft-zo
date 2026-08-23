@@ -66,7 +66,7 @@ class Log extends Component
             return;
         }
 
-        $keepPayloads = $settings->logPayloads && Plugin::getInstance()->isPro();
+        $keepPayloads = $settings->logPayloads;
 
         try {
             Craft::$app->getDb()->createCommand()->insert(Table::LOG, [
@@ -146,7 +146,7 @@ class Log extends Component
      */
     public function prune(?int $days = null): int
     {
-        $days ??= Plugin::getInstance()->getSettings()->getEffectiveLogRetentionDays();
+        $days ??= Plugin::getInstance()->getSettings()->logRetentionDays;
 
         if ($days <= 0) {
             return 0;

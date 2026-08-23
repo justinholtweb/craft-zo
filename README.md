@@ -1,13 +1,13 @@
 # Zo
 
-Zoho Books for Craft Commerce.
+Zoho Books for Craft Commerce. An independent plugin — not affiliated with Zoho Corporation.
 
 Zo pushes your store into your books: customers become Zoho contacts, completed orders become
 invoices, payments become receipts and refunds become credit notes — automatically, idempotently,
 and with every document checked against what the customer actually paid.
 
 **Requires** Craft CMS 5.3+, Craft Commerce 5.0+ and PHP 8.2+.
-**Editions:** Lite (free) and Pro.
+**Price:** a one-off $99, with a $79/year renewal for updates.
 
 ---
 
@@ -32,22 +32,24 @@ reconcile.
 
 ## What it does
 
-| | Lite | Pro |
-|---|---|---|
-| OAuth connection, all Zoho data centres | ● | ● |
-| Customers → Zoho contacts (matching existing ones) | ● | ● |
-| Completed orders → invoices | ● | ● |
-| Reconciliation check on every document | ● | ● |
-| Sync screen, order-edit panel, connection log | ● | ● |
-| Queue-driven syncing with backoff | ● | ● |
-| Payments → Zoho customer payments | | ● |
-| Refunds → credit notes (and the refund entry) | | ● |
-| Products → Zoho items, matched by SKU | | ● |
-| Sales orders | | ● |
-| Mapped tax rates | | ● |
-| Custom field mapping | | ● |
-| Bulk backfill of past orders | | ● |
-| Full request/response bodies in the log | | ● |
+Everything below is in the one edition. There is no free tier and no feature to unlock later.
+
+| | |
+|---|---|
+| **OAuth connection** | All eight Zoho data centres, with the region taken from Zoho's own redirect rather than guessed |
+| **Customers → contacts** | Matched against the contacts you already have, by email or by name, before one is created |
+| **Completed orders → invoices** | Promoted out of draft, so they count toward receivables |
+| **Reconciliation** | Every document's Zoho total checked against what Commerce charged, both numbers stored |
+| **Payments → customer payments** | Commerce payment transactions, applied against the invoice |
+| **Refunds → credit notes** | Plus the cash movement, when a deposit account is configured |
+| **Products → Zoho items** | Matched by SKU, so sales-by-item reporting works |
+| **Sales orders** | Alongside invoices, or instead of them |
+| **Tax** | Commerce as the source of truth, or mapped rates with Zoho computing |
+| **Custom field mapping** | Zoho custom fields filled from object templates rendered against the order |
+| **Bulk backfill** | For a store that was already trading when Zo arrived |
+| **Queue-driven syncing** | With exponential backoff, and retry from the CP or the console |
+| **Connection log** | Every call, with credentials redacted before the row is written |
+| **Sync screen and order panel** | What is in the books, what failed, and what does not reconcile |
 
 ---
 
@@ -201,7 +203,7 @@ Every call Zo makes lands in the log with its endpoint, HTTP status, Zoho's own 
 how long it took. Client secrets, refresh tokens, authorization codes and bearer tokens are
 redacted before anything is written, so the log is safe to hand to whoever is debugging.
 
-Lite keeps summaries for seven days. Pro keeps the full bodies for as long as you configure.
+Full request and response bodies are kept for as long as you configure.
 
 ---
 
@@ -214,6 +216,14 @@ URL and accounts URL overrides. Both are environment-variable parseable.
 the account out. Zo defaults to 90, leaving headroom for anything else talking to the same
 organization. The counter is shared across web requests, queue workers and console commands,
 because Zoho counts them all the same.
+
+---
+
+## Trademarks
+
+Zo is an independent plugin built by Justin Holt. It is **not affiliated with, endorsed by, or
+sponsored by Zoho Corporation**. “Zoho” and “Zoho Books” are trademarks of Zoho Corporation, used
+here only to identify the service Zo connects to.
 
 ---
 

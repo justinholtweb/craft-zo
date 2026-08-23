@@ -162,7 +162,7 @@ class Sync extends Component
         }
 
         // 3. The document.
-        $documentType = $settings->getEffectiveDocumentType();
+        $documentType = $settings->documentType;
 
         if ($documentType === Settings::DOCUMENT_SALESORDER || $documentType === Settings::DOCUMENT_BOTH) {
             $this->syncSalesOrder($order, $contactId, $itemIds, $result);
@@ -183,11 +183,11 @@ class Sync extends Component
         }
 
         // 4. Money.
-        if ($plugin->isPro() && $settings->syncPayments) {
+        if ($settings->syncPayments) {
             $this->syncPayments($order, $invoiceLink, $contactId, $result);
         }
 
-        if ($plugin->isPro() && $settings->syncRefunds) {
+        if ($settings->syncRefunds) {
             $this->syncRefunds($order, $contactId, $result);
         }
 

@@ -309,7 +309,7 @@ class Documents extends Component
     public function buildLineItems(Order $order, array $itemIds = []): array
     {
         $settings = Plugin::getInstance()->getSettings();
-        $taxMode = $settings->getEffectiveTaxMode();
+        $taxMode = $settings->taxMode;
         $lines = [];
         $index = 0;
 
@@ -432,7 +432,7 @@ class Documents extends Component
     private function applyTax(Order $order, array &$payload): void
     {
         $settings = Plugin::getInstance()->getSettings();
-        $mode = $settings->getEffectiveTaxMode();
+        $mode = $settings->taxMode;
 
         if ($mode !== Settings::TAX_MODE_ADJUSTMENT) {
             // `mapped` already put tax_ids on the lines; `none` wants nothing at all.
@@ -482,10 +482,6 @@ class Documents extends Component
      */
     private function applyCustomFields(Order $order, array &$payload): void
     {
-        if (!Plugin::getInstance()->isPro()) {
-            return;
-        }
-
         $fields = [];
 
         foreach (Plugin::getInstance()->getSettings()->customFields as $key => $template) {

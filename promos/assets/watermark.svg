@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="#ffffff">
+  <!-- Ruled ledger pages with the Z laid over them, scaled up from the icon's own Z.
+       The page outline is deliberately absent: at ~1120px on a slide the icon's border would
+       be a hard-edged box, and a box is not a mark. Fine rules read as paper at any size. -->
+  <g opacity=".85">
+    <rect x="12" y="18" width="76" height="1.4"/>
+    <rect x="12" y="26" width="76" height="1.4"/>
+    <rect x="12" y="34" width="76" height="1.4"/>
+    <rect x="12" y="42" width="76" height="1.4"/>
+    <rect x="12" y="50" width="76" height="1.4"/>
+    <rect x="12" y="58" width="76" height="1.4"/>
+    <rect x="12" y="66" width="76" height="1.4"/>
+    <rect x="12" y="74" width="76" height="1.4"/>
+    <rect x="12" y="82" width="76" height="1.4"/>
+  </g>
+  <rect x="22" y="12" width="2" height="80" opacity=".85"/>
+  <path d="M34 26h42v9L48 65h28v9H34v-9l28-30H34Z"/>
+</svg>

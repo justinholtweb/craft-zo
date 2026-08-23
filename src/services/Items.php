@@ -33,9 +33,7 @@ class Items extends Component
      */
     public function syncForOrder(Order $order): array
     {
-        $plugin = Plugin::getInstance();
-
-        if (!$plugin->isPro() || !$plugin->getSettings()->syncItems) {
+        if (!Plugin::getInstance()->getSettings()->syncItems) {
             return [];
         }
 

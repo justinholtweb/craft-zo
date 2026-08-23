@@ -29,12 +29,6 @@
         </div>
     {% endif %}
 
-    {% if not isPro %}
-        <div class="pane">
-            <p class="light">{{ 'Request and response bodies are a Pro feature.'|t('zo') }}</p>
-        </div>
-    {% endif %}
-
     {% if entry.request %}
         <div class="pane">
             <h2>{{ 'Request'|t('zo') }}</h2>

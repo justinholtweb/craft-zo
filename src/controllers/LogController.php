@@ -49,7 +49,6 @@ class LogController extends Controller
             'level' => $criteria['level'] ?? '',
             'action' => $criteria['action'] ?? '',
             'levels' => LogEntry::levels(),
-            'isPro' => Plugin::getInstance()->isPro(),
         ]);
     }
 
@@ -63,7 +62,6 @@ class LogController extends Controller
 
         return $this->renderTemplate('zo/log/_detail', [
             'entry' => $entry,
-            'isPro' => Plugin::getInstance()->isPro(),
         ]);
     }
 

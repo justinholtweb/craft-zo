@@ -6,7 +6,6 @@ use Craft;
 use craft\base\Model;
 use craft\helpers\App;
 use craft\helpers\UrlHelper;
-use justinholtweb\zo\Plugin;
 
 /**
  * Zo settings.
@@ -598,41 +597,6 @@ class Settings extends Model
         }
 
         return array_values(array_unique($scopes));
-    }
-
-    // Edition-aware effective values
-    // -------------------------------------------------------------------------
-
-    /**
-     * Lite keeps a short log tail: it has no log screen to prune from, and an unbounded table on
-     * an install nobody is watching is a support ticket waiting to happen.
-     */
-    public function getEffectiveLogRetentionDays(): int
-    {
-        return $this->isPro() ? $this->logRetentionDays : 7;
-    }
-
-    public function getEffectiveTaxMode(): string
-    {
-        // Mapped tax needs the tax map, which is a Pro screen. Falling back to `adjustment` rather
-        // than `none` keeps a downgraded install's invoices reconciling.
-        if ($this->taxMode === self::TAX_MODE_MAPPED && !$this->isPro()) {
-            return self::TAX_MODE_ADJUSTMENT;
-        }
-
-        return $this->taxMode;
-    }
-
-    public function getEffectiveDocumentType(): string
-    {
-        return $this->isPro() ? $this->documentType : self::DOCUMENT_INVOICE;
-    }
-
-    private function isPro(): bool
-    {
-        $plugin = Plugin::getInstance();
-
-        return $plugin !== null && $plugin->isPro();
     }
 
     /**

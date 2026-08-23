@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<!-- handmade: hand-tuned deck -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Zo — Plugin Store promos</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --charcoal: #0f0f1a;
+    --charcoal-light: #1a1a2e;
+    --charcoal-lighter: #252540;
+    --accent: #1F5F8B;
+    --accent-light: #4E9BCB;
+    --gold: #E8B04B;
+    --off-white: #f0f0f5;
+  }
+
+  html { background: #000; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    color: var(--off-white);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- slide shell ---------------------------------------------------- */
+  .slide {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse at 85% 15%, rgba(31, 95, 139, 0.26) 0%, transparent 40%),
+      radial-gradient(ellipse at 65% 5%,  rgba(78, 155, 203, 0.14) 0%, transparent 35%),
+      radial-gradient(ellipse at 15% 85%, rgba(232, 176, 75, 0.07) 0%, transparent 40%),
+      radial-gradient(ellipse at 35% 95%, rgba(31, 95, 139, 0.10) 0%, transparent 35%),
+      linear-gradient(135deg, #0f0f1a 0%, #101822 30%, #121d28 60%, #0f0f1a 100%);
+  }
+
+  /* Oversized watermark, echoing the app icon */
+  .slide::after {
+    content: '';
+    position: absolute;
+    top: -14%;
+    left: -16%;
+    width: 1120px;
+    height: 1120px;
+    background: url('assets/watermark.svg') no-repeat center / contain;
+    opacity: 0.045;
+    pointer-events: none;
+    /* Fade the page edge out rather than cutting it off mid-slide. */
+    -webkit-mask-image: linear-gradient(95deg, #000 0%, #000 42%, transparent 88%);
+    mask-image: linear-gradient(95deg, #000 0%, #000 42%, transparent 88%);
+  }
+
+  /* Hairline along the top edge */
+  .slide::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-light), var(--gold), var(--accent));
+    z-index: 5;
+  }
+
+  .inner {
+    position: relative;
+    z-index: 2;
+    height: 100%;
+    padding: 118px 130px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* ---- type ------------------------------------------------------------ */
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: rgba(240, 240, 245, 0.62);
+    margin-bottom: 34px;
+  }
+  .eyebrow .rule {
+    width: 58px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--accent-light);
+  }
+
+  h1, h2 {
+    font-family: 'Jersey 20', sans-serif;
+    font-weight: 400;
+    line-height: 0.9;
+    letter-spacing: 0.005em;
+  }
+
+  .gradient-text {
+    background: linear-gradient(100deg, #4E9BCB 0%, #8FCBEC 34%, #E8B04B 68%, #5FA8D4 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .lede {
+    font-size: 34px;
+    line-height: 1.5;
+    color: rgba(240, 240, 245, 0.72);
+  }
+
+  .mono {
+    font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+
+  /* ---- cover slide ----------------------------------------------------- */
+  .cover .inner { gap: 90px; }
+  .cover .copy { flex: 1 1 auto; }
+  .cover h1 { font-size: 300px; margin-bottom: 26px; }
+  .cover .tagline {
+    font-family: 'Jersey 20', sans-serif;
+    font-size: 60px;
+    line-height: 1.02;
+    color: var(--off-white);
+    margin-bottom: 40px;
+    max-width: 15ch;
+  }
+  .cover .lede { max-width: 27ch; font-size: 30px; }
+
+  .cover .mark {
+    flex: 0 0 auto;
+    width: 460px;
+    height: 460px;
+    filter: drop-shadow(14px 14px 0 rgba(0, 0, 0, 0.35));
+  }
+  .cover .mark img { width: 100%; height: 100%; display: block; }
+
+  .badges { display: flex; gap: 16px; margin-top: 52px; }
+  .disclaimer {
+    margin-top: 30px;
+    max-width: 52ch;
+    font-size: 18px;
+    line-height: 1.5;
+    color: rgba(240, 240, 245, 0.32);
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 26px;
+    font-size: 22px;
+    font-weight: 500;
+    color: rgba(240, 240, 245, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 999px;
+  }
+  .badge .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent-light);
+  }
+
+  /* ---- the statement --------------------------------------------------- */
+  .statement .inner { flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+  .statement .eyebrow { justify-content: center; }
+  .swap { display: flex; flex-direction: column; align-items: center; gap: 22px; margin-top: 8px; }
+  .swap .caption {
+    font-size: 26px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(240, 240, 245, 0.42);
+  }
+  .swap .before {
+    font-size: 92px;
+    color: rgba(240, 240, 245, 0.34);
+    letter-spacing: 0.02em;
+  }
+  .swap .arrow {
+    width: 4px;
+    height: 62px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, rgba(78,155,203,0.15), var(--accent-light));
+    position: relative;
+  }
+  .swap .arrow::after {
+    content: '';
+    position: absolute;
+    left: 50%; bottom: -4px;
+    width: 18px; height: 18px;
+    transform: translateX(-50%) rotate(45deg);
+    border-right: 4px solid var(--accent-light);
+    border-bottom: 4px solid var(--accent-light);
+    border-radius: 2px;
+  }
+  .swap .after {
+    font-size: 132px;
+    line-height: 1;
+    letter-spacing: 0.01em;
+  }
+  .swap .match {
+    margin-top: 30px;
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 36px;
+    border-radius: 999px;
+    font-size: 29px;
+    color: rgba(240, 240, 245, 0.55);
+    border: 1px solid rgba(78, 155, 203, 0.3);
+    background: rgba(31, 95, 139, 0.14);
+  }
+  .swap .match b { color: var(--off-white); font-weight: 500; }
+  .swap .match .zero { color: #4ade80; }
+
+  .statement .lede { margin-top: 40px; max-width: 36ch; font-size: 32px; }
+
+  /* ---- feature slides -------------------------------------------------- */
+  .feature .inner { align-items: center; }
+  .feature .copy { width: 780px; flex: 0 0 780px; }
+  .feature h2 { font-size: 108px; margin-bottom: 30px; }
+  .feature .lede { max-width: 21ch; }
+
+  .points {
+    list-style: none;
+    margin-top: 44px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .points li {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    font-size: 25px;
+    line-height: 1.4;
+    color: rgba(240, 240, 245, 0.6);
+  }
+  .points li .tick {
+    flex: 0 0 auto;
+    margin-top: 9px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent-light);
+  }
+
+  /* Right-hand panel shared by the mapping, mode, flow and table slides */
+  .panel {
+    position: absolute;
+    top: 50%;
+    left: 900px;
+    right: 130px;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  /* ---- what maps to what ----------------------------------------------- */
+  .token-row {
+    display: flex;
+    align-items: center;
+    gap: 30px;
+    padding: 34px 38px;
+    border-radius: 16px;
+    background: rgba(37, 37, 64, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .token-row .fmt { font-size: 30px; color: rgba(240, 240, 245, 0.55); flex: 0 0 320px; }
+  .token-row .to { color: var(--accent-light); font-size: 30px; flex: 0 0 auto; }
+  .token-row .val { font-size: 31px; color: var(--off-white); flex: 1 1 auto; white-space: nowrap; }
+
+  /* ---- tax modes -------------------------------------------------------- */
+  .buckets { display: flex; gap: 22px; }
+  .bucket {
+    flex: 1 1 0;
+    padding: 38px 30px;
+    border-radius: 18px;
+    background: rgba(37, 37, 64, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    text-align: center;
+  }
+  .bucket .period {
+    font-size: 25px;
+    letter-spacing: 0.1em;
+    color: rgba(240, 240, 245, 0.5);
+    margin-bottom: 20px;
+  }
+  .bucket .count {
+    font-family: 'Jersey 20', sans-serif;
+    font-size: 68px;
+    line-height: 1;
+    color: var(--accent-light);
+  }
+  .bucket .label { font-size: 21px; line-height: 1.4; color: rgba(240, 240, 245, 0.4); margin-top: 16px; }
+  .bucket.fresh { border-color: rgba(78, 155, 203, 0.4); }
+  .bucket.muted .count { color: rgba(240, 240, 245, 0.35); }
+
+  .note {
+    font-size: 24px;
+    line-height: 1.5;
+    color: rgba(240, 240, 245, 0.45);
+    text-align: center;
+    margin-top: 8px;
+  }
+
+  /* ---- claim flow -------------------------------------------------------- */
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+    padding: 28px 34px;
+    border-radius: 16px;
+    background: rgba(37, 37, 64, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .step .num {
+    flex: 0 0 auto;
+    width: 58px; height: 58px;
+    display: grid; place-items: center;
+    border-radius: 12px;
+    background: var(--accent);
+    font-family: 'Jersey 20', sans-serif;
+    font-size: 38px;
+    color: #fff;
+  }
+  .step .label { display: block; font-size: 29px; font-weight: 600; color: var(--off-white); }
+  .step .sub { display: block; font-size: 21px; color: rgba(240, 240, 245, 0.55); margin-top: 6px; }
+
+  .lock {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    font-size: 23px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(240, 240, 245, 0.42);
+  }
+  .lock .bar { flex: 1 1 auto; height: 1px; background: rgba(255,255,255,0.1); }
+
+  /* ---- reconciliation table ---------------------------------------------- */
+  .sheet {
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.5);
+  }
+  .sheet .head {
+    display: flex;
+    padding: 26px 38px;
+    background: rgba(31, 95, 139, 0.22);
+    font-size: 21px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(240, 240, 245, 0.6);
+  }
+  .sheet .row {
+    display: flex;
+    padding: 26px 38px;
+    background: rgba(37, 37, 64, 0.55);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 29px;
+  }
+  .sheet .c1 { flex: 0 0 190px; }
+  .sheet .c2 { flex: 0 0 255px; }
+  .sheet .c3 { flex: 0 0 255px; }
+  .sheet .c4 { flex: 1 1 auto; text-align: right; }
+  .sheet .row .c1 { color: rgba(240, 240, 245, 0.55); }
+  .sheet .row .c2 { color: rgba(240, 240, 245, 0.75); }
+  .sheet .row .c3 { color: var(--off-white); }
+  .sheet .row .c4 { color: #4ade80; }
+  .sheet .row.off .c3, .sheet .row.off .c4 { color: var(--gold); }
+
+  /* ---- terminal --------------------------------------------------------- */
+  .term {
+    position: absolute;
+    top: 50%;
+    left: 900px;
+    right: -110px;
+    transform: translateY(-50%);
+    border-radius: 14px; overflow: hidden; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55); border: 1px solid rgba(255, 255, 255, 0.08); }
+  .term .chrome {
+    height: 44px;
+    background: #2a2a3e;
+    background-image:
+      radial-gradient(circle at 26px 22px, #ff5f57 6.5px, transparent 7px),
+      radial-gradient(circle at 52px 22px, #ffbd2e 6.5px, transparent 7px),
+      radial-gradient(circle at 78px 22px, #28ca42 6.5px, transparent 7px);
+  }
+  .term .body {
+    background: #12121f;
+    padding: 42px 44px;
+    font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 25px;
+    line-height: 2.0;
+  }
+  .term .prompt { color: var(--accent-light); }
+  .term .cmd { color: var(--off-white); }
+  .term .out { color: rgba(240, 240, 245, 0.45); }
+  .term .ok { color: #4ade80; }
+  .term .warn { color: var(--gold); }
+  .term .blank { display: block; height: 20px; }
+
+  /* ---- footer lockup --------------------------------------------------- */
+  .footer {
+    position: absolute;
+    left: 130px;
+    bottom: 62px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-size: 22px;
+    letter-spacing: 0.06em;
+    color: rgba(240, 240, 245, 0.4);
+  }
+  .footer img { width: 40px; height: 40px; border-radius: 9px; }
+  .footer b { color: rgba(240, 240, 245, 0.72); font-weight: 600; }
+
+  /* Only render the requested slide when screenshotting */
+  body.single .slide { display: none; }
+  body.single .slide.active { display: block; }
+</style>
+</head>
+<body>
+
+<!-- 1 · Cover ============================================================ -->
+<section class="slide cover" data-n="1">
+  <div class="inner">
+    <div class="copy">
+      <div class="eyebrow"><span class="rule"></span> Craft Commerce 5 &nbsp;·&nbsp; Zoho Books</div>
+      <h1 class="gradient-text">Zo</h1>
+      <p class="tagline">Your store, in your books. Reconciled.</p>
+      <p class="lede">Customers, orders, payments and refunds into Zoho Books — idempotently, and
+        checked against what the customer actually paid.</p>
+      <div class="badges">
+        <span class="badge"><span class="dot"></span> $99 &nbsp;·&nbsp; $79/year renewal</span>
+        <span class="badge">Craft 5.3+ · Commerce 5 · PHP 8.2+</span>
+      </div>
+      <p class="disclaimer">An independent plugin. Not affiliated with, endorsed by, or sponsored by
+        Zoho Corporation. &ldquo;Zoho&rdquo; and &ldquo;Zoho Books&rdquo; are trademarks of Zoho Corporation.</p>
+    </div>
+    <div class="mark"><img src="assets/icon.svg" alt=""></div>
+  </div>
+</section>
+
+<!-- 2 · The statement ==================================================== -->
+<section class="slide statement" data-n="2">
+  <div class="inner">
+    <div class="eyebrow"><span class="rule"></span> The whole idea</div>
+    <div class="swap">
+      <span class="caption">Commerce completes an order</span>
+      <span class="before mono">#1042 · $1,248.60</span>
+      <span class="arrow"></span>
+      <span class="caption">Zoho Books has the invoice</span>
+      <span class="after mono gradient-text">INV-000119</span>
+      <span class="match mono"><b>$1,248.60</b> invoiced &nbsp;·&nbsp; variance <b class="zero">0.00</b></span>
+    </div>
+    <p class="lede">Both totals are stored side by side on every document, and the difference is
+      surfaced rather than absorbed. If <em>Not reconciled</em> is zero, your books agree with your
+      store.</p>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Zo</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-zo</div>
+</section>
+
+<!-- 3 · What maps to what ================================================ -->
+<section class="slide feature" data-n="3">
+  <div class="inner">
+    <div class="copy">
+      <div class="eyebrow"><span class="rule"></span> What syncs</div>
+      <h2>Money moves<br>both ways</h2>
+      <p class="lede">Money moves in more than one direction, and the books have to show all of it.</p>
+      <ul class="points">
+        <li><span class="tick"></span> An existing Zoho contact is adopted, never duplicated</li>
+        <li><span class="tick"></span> Invoices are promoted out of draft, so receivables are real</li>
+        <li><span class="tick"></span> A refund is a credit note — Zoho cannot refund a paid invoice</li>
+      </ul>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="token-row mono"><span class="fmt">Commerce customer</span><span class="to">&rarr;</span><span class="val">Zoho contact</span></div>
+    <div class="token-row mono"><span class="fmt">Completed order</span><span class="to">&rarr;</span><span class="val">Invoice</span></div>
+    <div class="token-row mono"><span class="fmt">Payment</span><span class="to">&rarr;</span><span class="val">Customer payment</span></div>
+    <div class="token-row mono"><span class="fmt">Refund</span><span class="to">&rarr;</span><span class="val">Credit note</span></div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Zo</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-zo</div>
+</section>
+
+<!-- 4 · Tax modes ======================================================== -->
+<section class="slide feature" data-n="4">
+  <div class="inner">
+    <div class="copy">
+      <div class="eyebrow"><span class="rule"></span> Tax</div>
+      <h2>Decide who<br>wins on tax</h2>
+      <p class="lede">Commerce calculates tax. So does Zoho. They will not always agree — so Zo makes
+        it a choice instead of a surprise.</p>
+      <ul class="points">
+        <li><span class="tick"></span> A custom adjuster is included without Zo modelling it</li>
+        <li><span class="tick"></span> Every mode is measured, not assumed</li>
+      </ul>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="buckets">
+      <div class="bucket fresh">
+        <div class="period mono">adjustment</div>
+        <div class="count">= paid</div>
+        <div class="label">No rates sent. The difference goes on as one adjustment, so the total matches to the cent.</div>
+      </div>
+      <div class="bucket">
+        <div class="period mono">mapped</div>
+        <div class="count">Zoho</div>
+        <div class="label">Line items carry tax ids and Zoho computes. Itemised tax reports, variance measured.</div>
+      </div>
+      <div class="bucket muted">
+        <div class="period mono">none</div>
+        <div class="count">0.00</div>
+        <div class="label">No tax anywhere. Only sensible for a tax-exempt store.</div>
+      </div>
+    </div>
+    <p class="note">The default is <span class="mono">adjustment</span> — because an invoice that
+      disagrees with the payment is a problem you find at year end.</p>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Zo</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-zo</div>
+</section>
+
+<!-- 5 · Reconciliation =================================================== -->
+<section class="slide feature" data-n="5">
+  <div class="inner">
+    <div class="copy">
+      <div class="eyebrow"><span class="rule"></span> Reconciliation</div>
+      <h2>Drift shows<br>up on screen</h2>
+      <p class="lede">Every document records both totals — what Commerce charged and what Zoho
+        returned — because the difference cannot be recomputed later.</p>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="sheet mono">
+      <div class="head"><span class="c1">Order</span><span class="c2">Commerce</span><span class="c3">Zoho</span><span class="c4">Variance</span></div>
+      <div class="row"><span class="c1">#1042</span><span class="c2">$1,248.60</span><span class="c3">$1,248.60</span><span class="c4">0.00</span></div>
+      <div class="row"><span class="c1">#1043</span><span class="c2">$319.95</span><span class="c3">$319.95</span><span class="c4">0.00</span></div>
+      <div class="row off"><span class="c1">#1044</span><span class="c2">$88.20</span><span class="c3">$88.17</span><span class="c4">0.03</span></div>
+      <div class="row"><span class="c1">#1045</span><span class="c2">$2,410.00</span><span class="c3">$2,410.00</span><span class="c4">0.00</span></div>
+    </div>
+    <p class="note">One row to look at, not a year of statements to compare.</p>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Zo</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-zo</div>
+</section>
+
+<!-- 6 · No duplicates ==================================================== -->
+<section class="slide feature" data-n="6">
+  <div class="inner">
+    <div class="copy">
+      <div class="eyebrow"><span class="rule"></span> Idempotency</div>
+      <h2>One invoice,<br>however hard<br>you try</h2>
+      <p class="lede">A queue retry, a redelivered webhook, an impatient second click — all of them
+        find the first attempt&rsquo;s row and stop.</p>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="lock"><span class="bar"></span> Unique index on (type, craftKey) <span class="bar"></span></div>
+    <div class="step"><span class="num">1</span><span><b class="label">Claim the link first</b><span class="sub">Insert the row before a single byte is sent</span></span></div>
+    <div class="step"><span class="num">2</span><span><b class="label">A duplicate key <em>is</em> the answer</b><span class="sub">Not an error to handle — the second attempt has found the first</span></span></div>
+    <div class="step"><span class="num">3</span><span><b class="label">Send, then record what came back</b><span class="sub">Zoho&rsquo;s id and number land on the row that was claimed</span></span></div>
+    <div class="lock"><span class="bar"></span> One code path. It cannot create two. <span class="bar"></span></div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Zo</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-zo</div>
+</section>
+
+<!-- 7 · Console ========================================================== -->
+<section class="slide feature" data-n="7">
+  <div class="inner">
+    <div class="copy">
+      <div class="eyebrow"><span class="rule"></span> Console &amp; preview</div>
+      <h2>Rehearses<br>before it writes</h2>
+      <p class="lede">The preview button, the dry run and the sync itself call the same builders —
+        so what you are reading is byte-for-byte what Zoho receives.</p>
+    </div>
+  </div>
+  <div class="term">
+    <div class="chrome"></div>
+    <div class="body">
+      <div><span class="prompt">$</span> <span class="cmd">php craft zo/sync/order 1042 --dry-run</span></div>
+      <div class="out">invoice &nbsp;·&nbsp; 4 lines &nbsp;·&nbsp; total <span class="ok">$1,248.60</span> &nbsp;·&nbsp; <span class="ok">nothing sent</span></div>
+      <span class="blank"></span>
+      <div><span class="prompt">$</span> <span class="cmd">php craft zo/sync/status</span></div>
+      <div class="out">1,904 of 1,911 orders in the books</div>
+      <div class="out">not reconciled: <span class="warn">1</span> &nbsp;·&nbsp; failed: <span class="ok">0</span></div>
+      <span class="blank"></span>
+      <div><span class="prompt">$</span> <span class="cmd">php craft zo/sync/backfill --queue</span></div>
+      <div class="out">7 orders queued, paced under Zoho&rsquo;s 100/min</div>
+    </div>
+  </div>
+  <div class="footer"><img src="assets/icon.svg" alt=""> <b>Zo</b> &nbsp;·&nbsp; justinholt.com/plugins/craft-zo</div>
+</section>
+
+<script>
+  var n = new URLSearchParams(location.search).get('s');
+  if (n) {
+    document.body.classList.add('single');
+    var el = document.querySelector('.slide[data-n="' + n + '"]');
+    if (el) el.classList.add('active');
+  }
+</script>
+</body>
+</html>
