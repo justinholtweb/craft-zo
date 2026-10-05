@@ -157,8 +157,11 @@ is written**, not on display, so the log is safe to hand to whoever is debugging
 
 ## Permissions
 
-- **View what has been synced** — the Sync screen and the order panel
+- **View what has been synced** — the Sync screen and the order panel. Previewing an order's
+  payload also needs permission to view that order — it carries the customer's details.
   - **Sync orders to Zoho Books** — the buttons, retries and backfill
   - **Unlink orders from Zoho Books** — forgetting a link. This is the one that can create a
     duplicate if used carelessly: a forgotten link means the next sync has nothing to find.
-- **View the connection log**
+- **View the connection log** — reading it. Clearing it is admin-only: it is the audit trail.
+
+Connecting, disconnecting and the settings screen are admin-only.

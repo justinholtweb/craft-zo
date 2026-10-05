@@ -3,7 +3,6 @@
 namespace justinholtweb\zo\models;
 
 use craft\base\Model;
-use craft\helpers\DateTimeHelper;
 use DateTime;
 
 /**
@@ -37,13 +36,9 @@ class LogEntry extends Model
      */
     public function init(): void
     {
+        // Dates need nothing here: craft\base\Model typecasts the config against the typed
+        // properties before they are assigned.
         parent::init();
-
-        foreach (['dateCreated', 'dateUpdated'] as $attribute) {
-            if ($this->$attribute !== null && !$this->$attribute instanceof DateTime) {
-                $this->$attribute = DateTimeHelper::toDateTime($this->$attribute) ?: null;
-            }
-        }
     }
 
     /**

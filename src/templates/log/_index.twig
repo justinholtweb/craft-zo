@@ -16,7 +16,9 @@
             }) }}
             {{ forms.text({ name: 'action', value: action, placeholder: 'Action'|t('zo') }) }}
             <button type="submit" class="btn">{{ 'Filter'|t('zo') }}</button>
-            <button type="button" class="btn" id="zo-log-clear">{{ 'Clear log'|t('zo') }}</button>
+            {% if currentUser.admin %}
+                <button type="button" class="btn" id="zo-log-clear">{{ 'Clear log'|t('zo') }}</button>
+            {% endif %}
         </form>
     </div>
 

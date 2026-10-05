@@ -178,7 +178,7 @@ class Sync extends Component
 
         $invoiceLink = $this->syncInvoice($order, $contactId, $itemIds, $result);
 
-        if ($invoiceLink === null || !$invoiceLink->getIsSynced()) {
+        if (!$invoiceLink->getIsSynced()) {
             return $result;
         }
 
@@ -245,7 +245,7 @@ class Sync extends Component
 
         $payload = $documents->buildInvoicePayload(
             $order,
-            $contactLink?->zohoId ?? '«contact_id»',
+            $contactLink->zohoId ?? '«contact_id»',
             []
         );
 
@@ -398,7 +398,7 @@ class Sync extends Component
     /**
      * @param array<int, string> $itemIds
      */
-    private function syncInvoice(Order $order, string $contactId, array $itemIds, SyncResult $result): ?Link
+    private function syncInvoice(Order $order, string $contactId, array $itemIds, SyncResult $result): Link
     {
         $plugin = Plugin::getInstance();
         $settings = $plugin->getSettings();

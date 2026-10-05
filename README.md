@@ -64,24 +64,26 @@ character for character, including the scheme.
 ### 2. Connect
 
 Paste the client ID and secret into Zo's settings, save, and press **Connect to Zoho Books**.
-Zoho sends you back with a refresh token, which Zo stores and uses from then on.
+Zoho sends you back with a refresh token, which Zo stores — encrypted, in its own table, never in
+project config — and uses from then on. Each environment connects for itself, the live site
+included: Connect works there even with admin changes off.
 
 Zo asks only for the scopes your configuration needs — never `fullaccess`. Turning on payment
 sync later widens the scopes, so reconnect after changing what Zo does.
 
 If your Zoho account lives outside the US, either set the data centre first or just connect: Zoho
-tells Zo which region you authorised against, and Zo corrects the setting for you.
+tells Zo which region you authorised against, and Zo uses that for you.
 
-### 3. Move the refresh token to an environment variable
+### 3. Keep the credentials out of project config
 
-Plugin settings live in project config, and project config gets committed. After connecting,
-copy the token into your `.env` and set the field to `$ZOHO_REFRESH_TOKEN`. Zo parses environment
-variables in every credential field.
+Plugin settings live in project config, and project config gets committed. Put the client ID and
+secret in your `.env` and enter their names; Zo parses environment variables in every credential
+field. Leave **Refresh token** empty — connecting stores it — unless you want to manage it yourself
+as `$ZOHO_REFRESH_TOKEN`.
 
 ```
 ZOHO_CLIENT_ID=1000.XXXXXXXX
 ZOHO_CLIENT_SECRET=xxxxxxxx
-ZOHO_REFRESH_TOKEN=1000.xxxxxxxx
 ZOHO_ORG_ID=10234695
 ```
 
@@ -145,6 +147,7 @@ php craft zo/sync/status                # how much of the store is in the books
 
 php craft zo/auth/test                  # check the credentials
 php craft zo/auth/refresh               # prove the refresh token still works
+php craft zo/auth/disconnect            # forget this environment's connection and revoke its token
 
 php craft zo/log/prune                  # honour the retention setting
 ```
@@ -189,11 +192,14 @@ If you are connecting Zo to a store that has been trading, do this in order:
 
 ## Permissions
 
-- **View what has been synced** — the Sync screen and the order panel
+- **View what has been synced** — the Sync screen and the order panel. Previewing an order's
+  payload also needs permission to view that order — it carries the customer's details.
   - **Sync orders to Zoho Books** — the buttons, retries and backfill
   - **Unlink orders from Zoho Books** — forgetting a link, which is how a duplicate gets made if
     you are careless
-- **View the connection log**
+- **View the connection log** — reading it. Clearing it is admin-only: it is the audit trail.
+
+Connecting, disconnecting and the settings screen are admin-only.
 
 ---
 

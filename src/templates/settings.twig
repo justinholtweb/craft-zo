@@ -29,6 +29,15 @@
             <a class="btn" href="{{ actionUrl('zo/settings/connect') }}">{{ 'Reconnect'|t('zo') }}</a>
             <button type="button" class="btn" id="zo-disconnect">{{ 'Disconnect'|t('zo') }}</button>
         </p>
+        {% set connection = plugin.getConnection().get() %}
+        <p class="light">
+            {% if connection and connection.refreshToken is not null %}
+                {{ 'Connected on this environment. The refresh token is stored in Zo’s own table, encrypted — not in project config.'|t('zo') }}
+            {% elseif connection %}
+                <span class="error">{{ 'The stored refresh token can’t be decrypted, probably because the site’s security key changed. Connect again.'|t('zo') }}</span>
+            {% endif %}
+            {{ 'Each environment connects for itself. Where this screen is read-only, Connect still works; disconnect with `php craft zo/auth/disconnect`.'|t('zo') }}
+        </p>
     {% else %}
         <p>{{ 'Create a Server-based Application in the Zoho API console, then paste its client ID and secret below and connect.'|t('zo') }}</p>
         <p>
@@ -84,19 +93,33 @@
     suggestEnvVars: true
 }) }}
 
+{% set literalToken = settings.storesLiteralRefreshToken() %}
+
+{% if literalToken %}
+    <blockquote class="note warning">
+        <p>{{ 'A refresh token is stored in Zo’s settings — and so in project config, which is committed with your site. Anyone with the repository can use it to read and write your books.'|t('zo') }}</p>
+        <p>{{ 'Since 5.0.1, connecting stores the token in Zo’s own table, encrypted. Connect on each environment that syncs, then tick “Remove it from project config” below and save. If the repository has been shared, disconnect first: that revokes this token at Zoho.'|t('zo') }}</p>
+    </blockquote>
+    {{ hiddenInput('refreshTokenKept', '1') }}
+{% endif %}
+
 {{ forms.autosuggestField({
     label: 'Refresh token'|t('zo'),
-    instructions: 'Filled in for you when you connect. **Move it to an environment variable** — plugin settings are stored in project config, and project config gets committed.'|t('zo'),
+    instructions: 'Leave empty: connecting stores the token for you. Only to manage it yourself, enter an environment variable holding it — not the token: settings are saved to project config.'|t('zo'),
     id: 'refreshToken',
     name: 'refreshToken',
-    value: settings.refreshToken,
-    suggestEnvVars: true
+    value: literalToken ? '' : settings.refreshToken,
+    placeholder: literalToken ? 'Leave empty to keep the stored token'|t('zo') : '$ZOHO_REFRESH_TOKEN',
+    suggestEnvVars: true,
+    errors: settings.getErrors('refreshToken')
 }) }}
 
-{% if settings.refreshToken and settings.refreshToken[0:1] != '$' %}
-    <p class="warning" style="margin-top: -14px;">
-        {{ 'This refresh token is stored in project config in plain text. Anyone with repository access can use it to read and write your books.'|t('zo') }}
-    </p>
+{% if literalToken %}
+    {{ forms.checkboxField({
+        label: 'Remove it from project config'|t('zo'),
+        name: 'refreshTokenRemove',
+        value: '1'
+    }) }}
 {% endif %}
 
 <div class="field">
@@ -562,15 +585,22 @@
 
 {% js %}
 (function() {
+    // Craft renders a plugin's settings inside a 'settings' namespace, which rewrites every id to
+    // `settings-…` — but not this script. Before 5.0.1 every lookup here missed, so every button on
+    // the screen did nothing. Both spellings are tried, so the screen works wherever it renders.
+    function byId(id) {
+        return document.getElementById('settings-' + id) || document.getElementById(id);
+    }
+
     function note(id, message, isError) {
-        var el = document.getElementById(id);
+        var el = byId(id);
         if (!el) return;
         el.textContent = message;
         el.className = isError ? 'error' : 'light';
     }
 
     function bind(id, method, action, handler) {
-        var button = document.getElementById(id);
+        var button = byId(id);
         if (!button) return;
         button.addEventListener('click', function() {
             note(id + '-note', '…', false);
@@ -606,7 +636,7 @@
     });
 
     bind('zo-preview', 'GET', 'zo/settings/preview', function(data) {
-        var out = document.getElementById('zo-preview-out');
+        var out = byId('zo-preview-out');
         if (!data.success) { note('zo-preview-note', data.message, true); return; }
         out.style.display = 'block';
         out.textContent = data.payload;
@@ -620,7 +650,7 @@
         );
     });
 
-    var disconnect = document.getElementById('zo-disconnect');
+    var disconnect = byId('zo-disconnect');
     if (disconnect) {
         disconnect.addEventListener('click', function() {
             Craft.sendActionRequest('POST', 'zo/settings/disconnect')

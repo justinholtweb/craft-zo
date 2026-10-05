@@ -56,7 +56,10 @@ class Auth extends Component
     {
         $settings = Plugin::getInstance()->getSettings();
 
-        if (!$settings->getIsConnected()) {
+        // Credentials, not "connected": a token needs no organization, and the calls that find one
+        // — the pick after connecting, "Look up organizations" — run before there is one. Before
+        // 5.0.1 this asked for the organization too, so neither could ever succeed.
+        if (!$settings->getHasCredentials()) {
             throw new NotConnectedException(Craft::t('zo', 'Zo is not connected to Zoho Books.'));
         }
 
@@ -196,10 +199,10 @@ class Auth extends Component
      * the local disconnect still has to happen or the merchant is stuck with a connection they
      * cannot remove.
      */
-    public function revokeRefreshToken(): bool
+    public function revokeRefreshToken(?string $token = null): bool
     {
         $settings = Plugin::getInstance()->getSettings();
-        $token = $settings->getParsedRefreshToken();
+        $token ??= $settings->getParsedRefreshToken();
 
         if ($token === '') {
             return false;
@@ -217,6 +220,31 @@ class Auth extends Component
 
             return false;
         }
+    }
+
+    /**
+     * Forget this environment's connection, at both ends.
+     *
+     * Revokes every token Zo knows about — the stored connection's and, on an install from before
+     * 5.0.1, the literal one still in project config — because forgetting only the first would
+     * quietly hand the job to the second. An `$ENV` token is the site's own to revoke.
+     */
+    public function disconnect(): void
+    {
+        $plugin = Plugin::getInstance();
+        $settings = $plugin->getSettings();
+
+        $tokens = array_unique(array_filter([
+            $plugin->getConnection()->get()['refreshToken'] ?? null,
+            $settings->storesLiteralRefreshToken() ? trim($settings->refreshToken) : null,
+        ]));
+
+        foreach ($tokens as $token) {
+            $this->revokeRefreshToken($token);
+        }
+
+        $this->forgetAccessToken();
+        $plugin->getConnection()->forget();
     }
 
     /**

@@ -59,7 +59,8 @@ declares a single edition')` exists to make that a deliberate act rather than a 
    a duplicate invoice comes from.
 3. **`services\Auth::getAccessToken()` is the only place a token is minted**, mutex-guarded with a
    re-read of the cache inside the lock. Without that, a backfill running twenty queue jobs
-   performs twenty refreshes.
+   performs twenty refreshes. It needs `getHasCredentials()`, **not** `getIsConnected()`: the
+   organization lookup runs before there is an organization, and until 5.0.1 it never could.
 
 ### Data model
 
@@ -68,7 +69,16 @@ declares a single edition')` exists to make that a deliberate act rather than a 
   only by `Link::key()`. `elementId` points at the **order** even for payment and refund links, so
   deleting an order takes its whole document set with it — a transaction is not an element and
   cannot carry the foreign key itself.
-- `{{%zo_log}}` — every call, with credentials redacted before the row is written.
+- `{{%zo_log}}` — every call, with credentials redacted before the row is written. Clearing it is
+  admin-only.
+- `{{%zo_connection}}` — the connection made on *this environment*: the refresh token
+  (`helpers\Secret`-encrypted, as in Freshh and Bird), the data centre Zoho reported, and the
+  auto-picked organization. **Never settings**: settings are project config, and each environment —
+  the live site included — connects for itself (`SettingsController` is `requireAdmin(false)`).
+  `services\Connection` owns it; `Settings::getParsedRefreshToken()`, `getSafeDataCenter()` and
+  `getParsedOrganizationId()` read it (an explicit organization setting still wins). The
+  `refreshToken` setting is only an `$ENV` override, and a literal is refused unless it is the
+  5.0.0 stored value — never rendered; the form posts `refreshTokenKept`.
 
 Both totals live on the link (`craftTotal`, `zohoTotal`, `variance`) because the difference cannot
 be recomputed later from two systems that have both moved on.
@@ -139,6 +149,11 @@ credit-notes, creditnotes/refunds.
 - `craft\commerce\events\OrderStatusEvent` carries `$order` directly.
 - Craft plugin console commands are not reachable via `craft help <handle>` — they are listed
   under a bare `craft help` and run as `zo/sync/order`.
+- **The settings script must look up `settings-` + id.** Craft renders plugin settings inside a
+  `settings` namespace, which rewrites every id but not the `{% js %}` block — every button was dead
+  until 5.0.1. `byId()` tries both; `security.php` checks every lookup resolves.
+- **A front-end template answers a POST without a CSRF token**, which is what lets
+  `security.php` play Zoho's token endpoint with a throwaway template behind `accountsUrl`.
 - `plugin/switch-edition` is not a console command; switching editions from a script means
   `Plugins::switchEdition()` plus `ProjectConfig::saveModifiedConfigData()`.
 
@@ -196,7 +211,9 @@ No local PHP on this Mac. Everything runs inside the plugin-testing container:
 
 ```sh
 cd ~/Sites/plugin-testing
-ddev exec php /var/www/craft-zo/tests/integration/checks.php   # 106 checks
+ddev exec php /var/www/craft-zo/tests/integration/checks.php   # 106 checks (2 fail on the shared harness: see below)
+ddev exec php /var/www/craft-zo/tests/integration/security.php # 23: connect round trip with admin changes off, token storage, migration, permissions
+docker exec -w /sites/craft-zo ddev-phpstan-runner-web bash -c 'vendor/bin/phpstan analyse --memory-limit=1G && vendor/bin/ecs check'
 ddev exec bash -c 'find /var/www/craft-zo/src -name "*.php" -print0 | xargs -0 -n1 php -l'
 ```
 
@@ -209,6 +226,10 @@ covers what the mock cannot: a live endpoint answering with HTML.
 The suite restores settings, fixtures, link rows, log rows and queued jobs in a `finally`. It also
 **self-heals**: a run killed before its `finally` leaves `fixture-client` in project config, and
 the next run recognises and clears it rather than snapshotting the pollution as the new original.
+
+Two `checks.php` failures are the shared harness, not Zo (October 2026): another plugin redirects
+unknown 404s to `/contact`, so "an endpoint answering with HTML" gets a 200 page; and the harness has
+~400 completed orders while the backfill check reads the oldest 200.
 
 Two things the suite has to do that are easy to get wrong:
 

@@ -65,10 +65,14 @@ class LogController extends Controller
         ]);
     }
 
+    /**
+     * Clearing destroys the audit trail of every accounting sync, so it is an admin's call. Before
+     * 5.0.1 "View the log" was enough.
+     */
     public function actionClear(): Response
     {
         $this->requirePostRequest();
-        $this->requirePermission('zo-viewLog');
+        $this->requireAdmin(false);
 
         $count = Plugin::getInstance()->getLog()->clear();
 

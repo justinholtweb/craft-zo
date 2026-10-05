@@ -11,6 +11,7 @@ use craft\web\Controller;
 use justinholtweb\zo\jobs\BackfillJob;
 use justinholtweb\zo\models\Link;
 use justinholtweb\zo\Plugin;
+use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
 use yii\web\Response;
 
@@ -189,6 +190,12 @@ class SyncController extends Controller
 
         if (!$order instanceof Order) {
             throw new NotFoundHttpException('Order not found.');
+        }
+
+        // The payload carries the customer's name, address, email and every line. "View what has
+        // been synced" is not "view orders": before 5.0.1 it was enough to read any order's.
+        if (!Craft::$app->getElements()->canView($order)) {
+            throw new ForbiddenHttpException('User is not authorized to view this order.');
         }
 
         $preview = Plugin::getInstance()->getSync()->preview($order);

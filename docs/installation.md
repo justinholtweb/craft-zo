@@ -42,7 +42,13 @@ Zoho hands you a **Client ID** and **Client Secret**.
 
 Paste the client ID and secret into **Settings → Zo**, save, and press **Connect to Zoho Books**.
 Zoho asks you to approve the scopes and sends you back with a refresh token, which Zo stores and
-uses from then on.
+uses from then on — **encrypted, in its own database table, never in project config**, because
+project config is committed with your site and that token reads and writes your books.
+
+**Each environment connects for itself**, including the live site: Connect works there even with
+admin changes off, when the rest of the settings screen is read-only. The client ID and secret are
+settings, so they deploy as usual; the connection does not. To disconnect where the screen is
+read-only, run `php craft zo/auth/disconnect`.
 
 Two things happen automatically here that are worth knowing about:
 
@@ -51,26 +57,37 @@ Two things happen automatically here that are worth knowing about:
   what Zo does or those calls will come back as permission errors.
 - **The data centre corrects itself.** If your Zoho account lives outside the US, you can set the
   data centre first — but you do not have to. Zoho's redirect names the region you actually
-  authorized against, and Zo writes that back to the setting. The eight data centres do not share
+  authorized against, and Zo keeps that alongside the connection, where it beats the setting. The
+eight data centres do not share
   data, so a token minted at one is a bare `401` at another; this is the misconfiguration Zo is
   built to make a non-event.
 
-## 3. Move the refresh token into an environment variable
+## 3. Keep the credentials out of project config
 
-Plugin settings live in project config, and project config gets committed. After connecting, copy
-the token out of the settings screen into your `.env` and set the field to `$ZOHO_REFRESH_TOKEN`.
-Every credential field on the settings screen parses environment variables.
+Plugin settings live in project config, and project config gets committed. Put the client ID and
+secret in your `.env` and enter `$ZOHO_CLIENT_ID` and `$ZOHO_CLIENT_SECRET`; every credential field
+parses environment variables.
 
 ```
 ZOHO_CLIENT_ID=1000.XXXXXXXX
 ZOHO_CLIENT_SECRET=xxxxxxxx
-ZOHO_REFRESH_TOKEN=1000.xxxxxxxx
 ZOHO_ORG_ID=10234695
 ```
+
+Leave **Refresh token** empty — connecting stores it for you. It is only an override, for a site
+that would rather manage the token itself: enter `$ZOHO_REFRESH_TOKEN`, never the token, which Zo
+refuses there.
+
+**Upgrading from 5.0.0?** That version saved the token into the setting, so it is in your
+repository. It keeps working, but connect once on each environment that syncs, then tick **Remove
+it from project config** on the settings screen and save. If the repository has been shared,
+disconnect first: that revokes the old token at Zoho.
 
 The **organization ID** matters as much as the credentials. Every Books API call carries one, and
 omitting it is not an error — Zoho answers for whichever organization it feels like, which on a
 multi-entity account files your invoices against the wrong company. Zo always sends it explicitly.
+When the connected account has exactly one organization, Zo picks it on connecting; set it here to
+choose one yourself.
 
 ## 4. Check it before you trust it
 

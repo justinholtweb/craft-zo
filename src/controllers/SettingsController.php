@@ -29,7 +29,9 @@ class SettingsController extends Controller
             return false;
         }
 
-        $this->requireAdmin();
+        // An admin's job, but not a project-config change: since 5.0.1 the connection is stored in
+        // Zo's own table, so each environment — the live site included — connects for itself.
+        $this->requireAdmin(false);
 
         return true;
     }
@@ -44,18 +46,6 @@ class SettingsController extends Controller
 
         if (!$settings->getCanConnect()) {
             Craft::$app->getSession()->setError(Craft::t('zo', 'Save a client ID and secret first.'));
-
-            return $this->redirect('settings/plugins/zo');
-        }
-
-        if (!Craft::$app->getConfig()->getGeneral()->allowAdminChanges) {
-            // The callback has to write the refresh token into plugin settings, and project
-            // config is read-only here. Better to say so now than after the merchant has clicked
-            // through Zoho's consent screen.
-            Craft::$app->getSession()->setError(Craft::t(
-                'zo',
-                'Admin changes are disabled in this environment, so the refresh token could not be saved. Connect on a development environment and deploy the token as an environment variable.'
-            ));
 
             return $this->redirect('settings/plugins/zo');
         }
@@ -106,20 +96,12 @@ class SettingsController extends Controller
             return $this->redirect('settings/plugins/zo');
         }
 
+        // Stored encrypted in Zo's own table, never as a setting: settings are project config, and
+        // project config is committed. Zoho also says which data centre the merchant actually
+        // authorised against, which is kept alongside and beats the dropdown — turning the single
+        // most common misconfiguration into a non-event without writing the setting.
+        $plugin->getConnection()->store($tokens['refreshToken'], $tokens['dataCenter']);
         $settings = $plugin->getSettings();
-        $settings->refreshToken = $tokens['refreshToken'];
-
-        // Zoho tells us which data centre the merchant actually authorised against. Trusting that
-        // over the dropdown turns the single most common misconfiguration into a non-event.
-        if ($tokens['dataCenter'] !== null && $tokens['dataCenter'] !== $settings->dataCenter) {
-            $settings->dataCenter = $tokens['dataCenter'];
-        }
-
-        if (!Craft::$app->getPlugins()->savePluginSettings($plugin, $settings->toArray())) {
-            $session->setError(Craft::t('zo', 'Zo connected, but the refresh token could not be saved.'));
-
-            return $this->redirect('settings/plugins/zo');
-        }
 
         $plugin->getAuth()->forgetAccessToken();
 
@@ -141,14 +123,7 @@ class SettingsController extends Controller
     {
         $this->requirePostRequest();
 
-        $plugin = Plugin::getInstance();
-        $plugin->getAuth()->revokeRefreshToken();
-        $plugin->getAuth()->forgetAccessToken();
-
-        $settings = $plugin->getSettings();
-        $settings->refreshToken = '';
-
-        Craft::$app->getPlugins()->savePluginSettings($plugin, $settings->toArray());
+        Plugin::getInstance()->getAuth()->disconnect();
 
         Craft::$app->getSession()->setNotice(Craft::t('zo', 'Disconnected from Zoho Books.'));
 
@@ -285,9 +260,8 @@ class SettingsController extends Controller
             return;
         }
 
-        $settings = $plugin->getSettings();
-        $settings->organizationId = $organizations[0]['id'];
-
-        Craft::$app->getPlugins()->savePluginSettings($plugin, $settings->toArray());
+        // Kept with the connection rather than written to the setting, which stays free for an
+        // explicit choice (or an `$ENV` reference) and is read first.
+        $plugin->getConnection()->setOrganizationId((string)$organizations[0]['id']);
     }
 }

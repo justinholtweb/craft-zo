@@ -74,8 +74,8 @@ class Documents extends Component
         // Zoho puts the email on a contact *person*, not on the contact. A contact created without
         // one cannot be emailed an invoice and shows as blank in every Zoho list.
         $person = array_filter([
-            'first_name' => $this->truncate($billing?->firstName ?? $this->firstWord($name), 100),
-            'last_name' => $this->truncate($billing?->lastName ?? $this->restOfWords($name), 100),
+            'first_name' => $this->truncate($billing->firstName ?? $this->firstWord($name), 100),
+            'last_name' => $this->truncate($billing->lastName ?? $this->restOfWords($name), 100),
             'email' => $email ?: null,
             'phone' => $this->phone($billing) ?: $this->phone($shipping) ?: null,
             'is_primary_contact' => true,
@@ -205,7 +205,7 @@ class Documents extends Component
 
         $gateway = $this->gatewayName($transaction);
         $payload['description'] = $this->truncate(Craft::t('zo', 'Craft Commerce order {number}{gateway}', [
-            'number' => $transaction->getOrder()?->reference ?? $transaction->getOrder()?->getShortNumber() ?? '',
+            'number' => $transaction->getOrder()->reference ?? $transaction->getOrder()?->getShortNumber() ?? '',
             'gateway' => $gateway !== '' ? " · {$gateway}" : '',
         ]), self::MAX_DESCRIPTION_LENGTH);
 
@@ -234,7 +234,7 @@ class Documents extends Component
             'amount' => Money::round(abs((float)$transaction->amount)),
             'from_account_id' => $fromAccountId,
             'description' => $this->truncate(Craft::t('zo', 'Refund on Craft Commerce order {number}', [
-                'number' => $transaction->getOrder()?->reference ?? '',
+                'number' => $transaction->getOrder()->reference ?? '',
             ]), self::MAX_DESCRIPTION_LENGTH),
         ];
 
@@ -617,7 +617,7 @@ class Documents extends Component
     private function gatewayName(Transaction $transaction): string
     {
         try {
-            return (string)($transaction->getGateway()?->name ?? '');
+            return (string)($transaction->getGateway()->name ?? '');
         } catch (\Throwable) {
             return '';
         }

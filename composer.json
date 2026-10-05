@@ -1,7 +1,7 @@
 {
     "name": "justinholtweb/craft-zo",
     "description": "Zoho Books integration for Craft Commerce — sync customers, orders, payments and refunds into Zoho Books, with every document reconciled against Commerce's own totals.",
-    "version": "5.0.0",
+    "version": "5.0.1",
     "type": "craft-plugin",
     "keywords": [
         "craftcms",
@@ -51,5 +51,10 @@
         "documentationUrl": "https://github.com/justinholtweb/craft-zo/blob/main/README.md",
         "changelogUrl": "https://raw.githubusercontent.com/justinholtweb/craft-zo/main/CHANGELOG.md",
         "class": "justinholtweb\\zo\\Plugin"
+    },
+    "require-dev": {
+        "craftcms/ecs": "dev-main",
+        "craftcms/phpstan": "dev-main",
+        "phpstan/phpstan": "^1.12 || ^2.2"
     }
 }

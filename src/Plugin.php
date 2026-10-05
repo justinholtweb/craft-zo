@@ -6,11 +6,11 @@ use Craft;
 use craft\base\Model;
 use craft\base\Plugin as BasePlugin;
 use craft\commerce\elements\Order;
+use craft\commerce\events\OrderStatusEvent;
 use craft\commerce\events\TransactionEvent;
+use craft\commerce\records\Transaction as TransactionRecord;
 use craft\commerce\services\OrderHistories;
 use craft\commerce\services\Transactions;
-use craft\commerce\events\OrderStatusEvent;
-use craft\commerce\records\Transaction as TransactionRecord;
 use craft\events\RegisterUrlRulesEvent;
 use craft\events\RegisterUserPermissionsEvent;
 use craft\services\UserPermissions;
@@ -20,6 +20,7 @@ use craft\web\View;
 use justinholtweb\zo\models\Settings;
 use justinholtweb\zo\services\Api;
 use justinholtweb\zo\services\Auth;
+use justinholtweb\zo\services\Connection;
 use justinholtweb\zo\services\Contacts;
 use justinholtweb\zo\services\Documents;
 use justinholtweb\zo\services\Items;
@@ -34,6 +35,7 @@ use yii\base\Event;
  *
  * @property-read Api $api
  * @property-read Auth $auth
+ * @property-read Connection $connection
  * @property-read Contacts $contacts
  * @property-read Documents $documents
  * @property-read Items $items
@@ -46,7 +48,7 @@ class Plugin extends BasePlugin
 {
     public const HANDLE = 'zo';
 
-    public string $schemaVersion = '5.0.0';
+    public string $schemaVersion = '5.0.1';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
@@ -59,6 +61,7 @@ class Plugin extends BasePlugin
             'components' => [
                 'api' => ['class' => Api::class],
                 'auth' => ['class' => Auth::class],
+                'connection' => ['class' => Connection::class],
                 'contacts' => ['class' => Contacts::class],
                 'documents' => ['class' => Documents::class],
                 'items' => ['class' => Items::class],
@@ -107,6 +110,11 @@ class Plugin extends BasePlugin
     public function getAuth(): Auth
     {
         return $this->get('auth');
+    }
+
+    public function getConnection(): Connection
+    {
+        return $this->get('connection');
     }
 
     public function getContacts(): Contacts

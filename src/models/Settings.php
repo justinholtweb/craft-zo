@@ -6,6 +6,7 @@ use Craft;
 use craft\base\Model;
 use craft\helpers\App;
 use craft\helpers\UrlHelper;
+use justinholtweb\zo\Plugin;
 
 /**
  * Zo settings.
@@ -13,6 +14,10 @@ use craft\helpers\UrlHelper;
  * Nothing here is ever marked `required`. Craft validates plugin settings wholesale, so a single
  * required attribute makes the settings screen unsaveable on a fresh install — which is exactly
  * when the Zoho credentials do not exist yet.
+ *
+ * @property array<string, string> $customFields  field handle => template
+ * @property array<string, string> $taxMap        tax category => Zoho tax id
+ * @property array<string, string> $paymentModeMap gateway => Zoho payment mode
  */
 class Settings extends Model
 {
@@ -51,12 +56,20 @@ class Settings extends Model
     public string $clientSecret = '';
 
     /**
-     * The long-lived refresh token. Written here by the connect flow, but belongs in an env var:
-     * plugin settings live in project config, and project config gets committed.
+     * An override for the refresh token: an environment variable (`$ZOHO_REFRESH_TOKEN`) for a site
+     * that manages it itself. Connecting stores the token in Zo's own table, encrypted —
+     * {@see \justinholtweb\zo\services\Connection} — never here.
+     *
+     * Before 5.0.1 the connect flow saved the token here, literally, and so committed it with
+     * project config. A literal is now refused unless it is that already-stored value, which the
+     * settings screen never renders and asks to remove.
      */
     public string $refreshToken = '';
 
-    /** The Zoho Books organization every call is scoped to. Env-parseable. */
+    /**
+     * The Zoho Books organization every call is scoped to. Env-parseable. Empty falls back to the
+     * one picked automatically when the connected account has only one.
+     */
     public string $organizationId = '';
 
     public string $dataCenter = 'com';
@@ -272,6 +285,7 @@ class Settings extends Model
     {
         return [
             [['dataCenter'], 'in', 'range' => array_keys(self::DATA_CENTERS)],
+            [['refreshToken'], 'validateRefreshToken'],
             [['taxMode'], 'in', 'range' => [self::TAX_MODE_ADJUSTMENT, self::TAX_MODE_MAPPED, self::TAX_MODE_NONE]],
             [['documentType'], 'in', 'range' => [self::DOCUMENT_INVOICE, self::DOCUMENT_SALESORDER, self::DOCUMENT_BOTH]],
             [['invoiceNumberSource'], 'in', 'range' => ['zoho', 'reference', 'number', 'shortNumber']],
@@ -458,14 +472,77 @@ class Settings extends Model
         return trim((string)App::parseEnv($this->clientSecret));
     }
 
+    /**
+     * The connection made on this environment first, then the setting — an `$ENV` override, or a
+     * literal stored before 5.0.1.
+     */
     public function getParsedRefreshToken(): string
     {
-        return trim((string)App::parseEnv($this->refreshToken));
+        $connected = self::connection()['refreshToken'] ?? null;
+
+        return $connected !== null && $connected !== '' ? $connected : trim((string)App::parseEnv($this->refreshToken));
     }
 
     public function getParsedOrganizationId(): string
     {
-        return trim((string)App::parseEnv($this->organizationId));
+        $configured = trim((string)App::parseEnv($this->organizationId));
+
+        return $configured !== '' ? $configured : (string)(self::connection()['organizationId'] ?? '');
+    }
+
+    /**
+     * Whether the setting holds a token itself rather than naming an environment variable — and so
+     * sits in project config. Only an install from before 5.0.1 can be in this state.
+     */
+    public function storesLiteralRefreshToken(): bool
+    {
+        $value = trim($this->refreshToken);
+
+        return $value !== '' && !str_starts_with($value, '$');
+    }
+
+    /**
+     * The settings screen never renders a stored literal token, so it posts an empty field and
+     * `refreshTokenKept`. Empty plus the flag means "unchanged" — unless "Remove it" was ticked.
+     */
+    public function setAttributes($values, $safeOnly = true): void
+    {
+        if (is_array($values)) {
+            if (!empty($values['refreshTokenKept']) && trim((string)($values['refreshToken'] ?? '')) === '') {
+                if (empty($values['refreshTokenRemove'])) {
+                    unset($values['refreshToken']);
+                } else {
+                    $values['refreshToken'] = '';
+                }
+            }
+
+            unset($values['refreshTokenKept'], $values['refreshTokenRemove']);
+        }
+
+        parent::setAttributes($values, $safeOnly);
+    }
+
+    public function validateRefreshToken(string $attribute): void
+    {
+        if (!$this->storesLiteralRefreshToken()) {
+            return;
+        }
+
+        $stored = Craft::$app->getProjectConfig()->get('plugins.zo.settings.refreshToken');
+
+        if (!is_string($stored) || trim($stored) !== trim($this->refreshToken)) {
+            $this->addError($attribute, Craft::t('zo', 'Enter an environment variable, such as `$ZOHO_REFRESH_TOKEN`, not the token itself: settings are saved to project config, which is committed with your site. Connecting stores the token for you.'));
+        }
+    }
+
+    /**
+     * @return array{refreshToken: ?string, dataCenter: ?string, organizationId: ?string}|null
+     */
+    private static function connection(): ?array
+    {
+        $plugin = Plugin::getInstance();
+
+        return $plugin?->getConnection()->get();
     }
 
     /**
@@ -473,10 +550,18 @@ class Settings extends Model
      */
     public function getIsConnected(): bool
     {
+        return $this->getHasCredentials() && $this->getParsedOrganizationId() !== '';
+    }
+
+    /**
+     * Whether Zo can get an access token — everything but the organization, which is what the
+     * organization lookup itself needs.
+     */
+    public function getHasCredentials(): bool
+    {
         return $this->getParsedClientId() !== ''
             && $this->getParsedClientSecret() !== ''
-            && $this->getParsedRefreshToken() !== ''
-            && $this->getParsedOrganizationId() !== '';
+            && $this->getParsedRefreshToken() !== '';
     }
 
     /**
@@ -554,6 +639,15 @@ class Settings extends Model
      */
     public function getSafeDataCenter(): string
     {
+        // The data centre Zoho reported when this environment connected beats the setting: a token
+        // from one region is rejected by every other. Before 5.0.1 the callback corrected the
+        // setting instead, which wrote project config.
+        $connected = self::connection()['dataCenter'] ?? null;
+
+        if ($connected !== null && isset(self::DATA_CENTERS[$connected])) {
+            return $connected;
+        }
+
         return isset(self::DATA_CENTERS[$this->dataCenter]) ? $this->dataCenter : 'com';
     }
 

@@ -28,6 +28,7 @@ class Install extends Migration
      */
     public function safeDown(): bool
     {
+        $this->dropTableIfExists(Table::CONNECTION);
         $this->dropTableIfExists(Table::LOG);
         $this->dropTableIfExists(Table::LINKS);
 
@@ -84,6 +85,28 @@ class Install extends Migration
             'dateUpdated' => $this->dateTime()->notNull(),
             'uid' => $this->uid(),
         ]);
+
+        $this->createTable(Table::CONNECTION, self::connectionColumns($this));
+    }
+
+    /**
+     * The Zoho connection made on this environment: one row. Runtime state rather than settings,
+     * because the refresh token is a credential and project config is committed.
+     */
+    public static function connectionColumns(Migration $migration): array
+    {
+        return [
+            'id' => $migration->primaryKey(),
+            // Secret::encrypt() output — base64 of Craft's encryptByKey().
+            'refreshToken' => $migration->text()->notNull(),
+            // The data centre Zoho reported on the redirect, which beats the setting.
+            'dataCenter' => $migration->string(16),
+            // Picked automatically when the account has exactly one organization.
+            'organizationId' => $migration->string(32),
+            'dateCreated' => $migration->dateTime()->notNull(),
+            'dateUpdated' => $migration->dateTime()->notNull(),
+            'uid' => $migration->uid(),
+        ];
     }
 
     private function createIndexes(): void

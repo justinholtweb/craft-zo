@@ -28,7 +28,7 @@ class AuthController extends Controller
             $this->stderr('Zo is not connected.' . PHP_EOL, Console::FG_RED);
             $this->stdout('  Client ID       ' . ($settings->getParsedClientId() !== '' ? 'set' : 'missing') . PHP_EOL);
             $this->stdout('  Client secret   ' . ($settings->getParsedClientSecret() !== '' ? 'set' : 'missing') . PHP_EOL);
-            $this->stdout('  Refresh token   ' . ($settings->getParsedRefreshToken() !== '' ? 'set' : 'missing') . PHP_EOL);
+            $this->stdout('  Refresh token   ' . self::tokenSource() . PHP_EOL);
             $this->stdout('  Organization ID ' . ($settings->getParsedOrganizationId() !== '' ? 'set' : 'missing') . PHP_EOL);
 
             return ExitCode::CONFIG;
@@ -43,6 +43,18 @@ class AuthController extends Controller
         }
 
         return $result['success'] ? ExitCode::OK : ExitCode::UNSPECIFIED_ERROR;
+    }
+
+    /**
+     * Forget this environment's Zoho connection and revoke its token — what the settings screen's
+     * Disconnect button does, for an environment where that screen is read-only.
+     */
+    public function actionDisconnect(): int
+    {
+        Plugin::getInstance()->getAuth()->disconnect();
+        $this->stdout('Disconnected from Zoho Books.' . PHP_EOL, Console::FG_GREEN);
+
+        return ExitCode::OK;
     }
 
     /**
@@ -61,5 +73,20 @@ class AuthController extends Controller
         $this->stdout('Access token refreshed.' . PHP_EOL, Console::FG_GREEN);
 
         return ExitCode::OK;
+    }
+
+    private static function tokenSource(): string
+    {
+        $plugin = Plugin::getInstance();
+        $settings = $plugin->getSettings();
+        $connection = $plugin->getConnection()->get();
+
+        return match (true) {
+            $connection !== null && $connection['refreshToken'] !== null => 'stored, encrypted (connected on this environment)',
+            $connection !== null => 'stored, but can’t be decrypted (security key changed?) — connect again',
+            $settings->storesLiteralRefreshToken() => 'in project config — connect again on this environment, then remove it from the settings screen',
+            $settings->getParsedRefreshToken() !== '' => 'from ' . trim($settings->refreshToken),
+            default => 'missing',
+        };
     }
 }

@@ -9,4 +9,5 @@ abstract class Table
 {
     public const LINKS = '{{%zo_links}}';
     public const LOG = '{{%zo_log}}';
+    public const CONNECTION = '{{%zo_connection}}';
 }

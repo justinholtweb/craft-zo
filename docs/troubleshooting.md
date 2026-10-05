@@ -19,6 +19,16 @@ Then read **Zo → Log**. Remember that Zoho answers some failures with **HTTP 2
 server does it for a bad grant, and the Books API does it for some rejected writes. The `code`
 column is the verdict, not the status column.
 
+
+## Connected on one environment, “not connected” on another
+
+Since 5.0.1 the connection is not a setting, so it does not deploy: the refresh token is stored,
+encrypted, in the database of the environment that connected. **Connect on each environment that
+syncs** — the live site included, where Connect works even though the rest of the settings screen is
+read-only. `php craft zo/auth/test` says where the token it is using came from.
+
+If the site's security key has changed since connecting, the stored token can no longer be
+decrypted; the settings screen says so. Connect again.
 ## The connection worked and then died about an hour later
 
 You got an access token but no refresh token, so Zo had exactly one hour of access.
