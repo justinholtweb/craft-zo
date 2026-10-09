@@ -1,7 +1,6 @@
 # Release Notes for Zo
 
-## Unreleased
-
+## 5.1.0 - 2026-10-09
 ### Added
 
 - Failure alerts. Zo now emails the addresses in **Settings → Zo → Alerts** — and can post to a
