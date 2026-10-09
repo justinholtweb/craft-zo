@@ -42,16 +42,21 @@ class ZohoStatusConditionRule extends BaseMultiSelectConditionRule implements El
     }
 
     /**
-     * Only the statuses Zo knows: a hand-edited or stale condition cannot smuggle anything else
-     * into the query.
+     * Keeps what was chosen, known or not.
+     *
+     * Stripping unknown statuses here (as 5.0.x did) turned a saved "is one of" whose statuses had
+     * all since been renamed or removed into "no filter" — a custom source silently widening to
+     * every order — and re-saving the source then lost the stale choice for good. Only
+     * {@see knownValues()} ever reaches SQL, so nothing hand-edited can smuggle anything into the
+     * query.
      *
      * @param string|string[] $values
      */
     public function setValues(array|string $values): void
     {
-        $known = array_keys(Links::orderStatusOptions());
+        $values = array_filter((array)$values, static fn($value) => is_string($value) || is_int($value));
 
-        parent::setValues(array_values(array_intersect((array)$values, $known)));
+        parent::setValues(array_values(array_map('strval', $values)));
     }
 
     /**
@@ -73,16 +78,27 @@ class ZohoStatusConditionRule extends BaseMultiSelectConditionRule implements El
      */
     public function modifyQuery(ElementQueryInterface $query): void
     {
-        $values = $this->getValues();
+        // Nothing chosen is no filter, as everywhere in Craft.
+        if ($this->getValues() === []) {
+            return;
+        }
 
-        if ($values === []) {
+        $known = $this->knownValues();
+
+        if ($known === []) {
+            // Chosen, but none of it exists any more: "is one of" matches nothing; "is not one of"
+            // excludes nothing.
+            if ($this->operator !== self::OPERATOR_NOT_IN) {
+                $query->andWhere('0=1');
+            }
+
             return;
         }
 
         $links = Plugin::getInstance()->getLinks();
         $condition = ['or'];
 
-        foreach ($values as $status) {
+        foreach ($known as $status) {
             $condition[] = $links->orderStatusCondition($status);
         }
 
@@ -94,12 +110,34 @@ class ZohoStatusConditionRule extends BaseMultiSelectConditionRule implements El
      */
     public function matchElement(ElementInterface $element): bool
     {
-        if (!$element instanceof Order || !$element->id) {
-            return $this->matchValue(Link::ORDER_NONE);
+        if ($this->getValues() === []) {
+            return true;
         }
 
-        $status = Plugin::getInstance()->getLinks()->orderStatuses([$element->id])[$element->id] ?? Link::ORDER_NONE;
+        $known = $this->knownValues();
 
-        return $this->matchValue($status);
+        if ($known === []) {
+            return $this->operator === self::OPERATOR_NOT_IN;
+        }
+
+        if (!$element instanceof Order || !$element->id) {
+            $status = Link::ORDER_NONE;
+        } else {
+            $status = Plugin::getInstance()->getLinks()->orderStatuses([$element->id])[$element->id] ?? Link::ORDER_NONE;
+        }
+
+        $in = in_array($status, $known, true);
+
+        return $this->operator === self::OPERATOR_NOT_IN ? !$in : $in;
+    }
+
+    /**
+     * The chosen statuses Zo still knows — the only ones that ever reach the query.
+     *
+     * @return string[]
+     */
+    private function knownValues(): array
+    {
+        return array_values(array_intersect($this->getValues(), array_keys(Links::orderStatusOptions())));
     }
 }

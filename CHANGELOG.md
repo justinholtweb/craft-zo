@@ -35,6 +35,14 @@
 - A 4xx from Zoho's accounts server while refreshing the token is now treated as a refusal (not
   retried as a network failure), and recorded in the log with its status.
 
+### Fixed
+
+- **A saved "Zoho Books status" filter could widen to every order.** The rule dropped statuses it
+  did not recognise as it loaded, so a custom source or condition whose chosen statuses had all
+  since been renamed or removed became "no filter" — and re-saving it lost the choice for good. The
+  choice is now kept as saved; "is one of" statuses Zo no longer knows matches no orders, and "is
+  not one of" them excludes none. Only known statuses ever reach the query.
+
 ## 5.0.1 - 2026-10-04
 
 > {warning} Zo now stores the Zoho refresh token in its own database table, encrypted, instead of in its settings — which are project config, committed with your site — and each environment connects for itself. Upgrading copies an existing token across so syncing keeps working; then connect once on each environment that syncs, open **Settings → Zo**, tick **Remove it from project config** and save. If the repository has been shared, disconnect first, which revokes the old token. Previewing an order's payload now also needs permission to view that order, and clearing the log is admin-only.

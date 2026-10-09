@@ -112,6 +112,9 @@ at the customer element, so a failed contact marks that customer's completed ord
 column memoises per request and is prefetched from `OrderQuery::EVENT_AFTER_POPULATE_ELEMENTS` on
 `element-indexes/*` requests only. The rule is registered unconditionally (a conditionally
 registered rule is dropped from saved conditions and the source widens to every order).
+`setValues()` keeps stale statuses as chosen; only the known ones reach SQL, and a rule whose
+chosen statuses are all unknown is `0=1` for "is one of" and no filter for "is not one of" (same in
+`matchElement()`). Stripping them on load — 5.0.x — turned such a source into "every order".
 
 ### Deposit accounts and processor fees
 
@@ -262,7 +265,7 @@ cd ~/Sites/plugin-testing
 ddev exec php /var/www/craft-zo/tests/integration/checks.php   # 106 checks (2 fail on the shared harness: see below)
 ddev exec php /var/www/craft-zo/tests/integration/security.php # 23: connect round trip with admin changes off, token storage, migration, permissions
 docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-zo/tests/integration/alerts.php  # 58: latch, mail, SSRF, webhook, auth signals, widget, console, test action over HTTP
-docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-zo/tests/integration/orders.php  # 42: status sets vs SQL, condition rule, column + action over HTTP, deposit accounts, fees
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-zo/tests/integration/orders.php  # 46: status sets vs SQL, condition rule, column + action over HTTP, deposit accounts, fees
 docker exec -w /sites/craft-zo ddev-phpstan-runner-web bash -c 'vendor/bin/phpstan analyse --memory-limit=1G && vendor/bin/ecs check'
 ddev exec bash -c 'find /var/www/craft-zo/src -name "*.php" -print0 | xargs -0 -n1 php -l'
 ```

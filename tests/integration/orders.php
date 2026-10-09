@@ -178,20 +178,60 @@ check('matchElement agrees with the query for every fixture', function() use ($m
     return $wrong === [] ?: implode(', ', $wrong);
 });
 
-check('unknown values are dropped on the way in, and the config round-trips', function() use ($makeRule) {
-    $rule = $makeRule([Link::ORDER_FAILED, 'drop table', 'bogus']);
-    $config = $rule->getConfig();
-    $again = Craft::$app->getConditions()->createConditionRule($config);
+check('a stale choice is kept as chosen, and the config round-trips it', function() use ($makeRule) {
+    $rule = $makeRule([Link::ORDER_FAILED, 'renamed-status']);
+    $again = Craft::$app->getConditions()->createConditionRule($rule->getConfig());
 
-    return $rule->getValues() === [Link::ORDER_FAILED] && $again->getValues() === [Link::ORDER_FAILED] && $rule->validate(['values'])
-        ?: json_encode($config);
+    return $rule->getValues() === [Link::ORDER_FAILED, 'renamed-status'] && $again->getValues() === [Link::ORDER_FAILED, 'renamed-status']
+        && $rule->validate(['values'])
+        ?: json_encode(['rule' => $rule->getValues(), 'again' => $again->getValues()]);
 });
 
-check('an empty rule leaves the query alone', function() use ($makeRule, $ids) {
+check('a mixed stale choice filters on the known status only', function() use ($makeRule, $ids, $fixtures) {
     $query = Order::find()->id($ids)->status(null);
-    $makeRule([])->modifyQuery($query);
+    $makeRule([Link::ORDER_SKIPPED, 'drop table'])->modifyQuery($query);
+    $got = array_map('intval', $query->ids());
 
-    return count($query->ids()) === count($ids) ?: 'narrowed';
+    return $got === [(int)$fixtures[Link::ORDER_SKIPPED]->id] ?: json_encode($got);
+});
+
+check('“is one of” only unknown statuses matches no order (it does not widen to all)', function() use ($makeRule, $fixtures) {
+    $rule = $makeRule(['bogus']);
+    $query = Order::find()->status(null);
+    $rule->modifyQuery($query);
+    $matched = array_filter($fixtures, static fn(Order $o) => $rule->matchElement($o));
+
+    return (int)$query->count() === 0 && $matched === [] && Order::find()->status(null)->count() > 0
+        ?: json_encode(['count' => $query->count(), 'matched' => array_keys($matched)]);
+});
+
+check('“is not one of” only unknown statuses excludes nothing', function() use ($makeRule, $fixtures) {
+    $rule = $makeRule(['bogus'], 'ni');
+    $query = Order::find()->status(null);
+    $rule->modifyQuery($query);
+    $missed = array_filter($fixtures, static fn(Order $o) => !$rule->matchElement($o));
+    $all = (int)Order::find()->status(null)->count();
+
+    return (int)$query->count() === $all && $missed === [] ?: json_encode(['count' => $query->count(), 'all' => $all, 'missed' => array_keys($missed)]);
+});
+
+check('a stale rule saved and reloaded still matches nothing', function() use ($makeRule) {
+    $again = Craft::$app->getConditions()->createConditionRule($makeRule(['bogus'])->getConfig());
+    $query = Order::find()->status(null);
+    $again->modifyQuery($query);
+
+    return (int)$query->count() === 0 ?: 'widened to ' . $query->count();
+});
+
+check('an empty rule leaves the query alone', function() use ($makeRule, $ids, $fixtures) {
+    $rule = $makeRule([]);
+    $query = Order::find()->id($ids)->status(null);
+    $rule->modifyQuery($query);
+    $all = Order::find()->status(null);
+    $rule->modifyQuery($all);
+
+    return count($query->ids()) === count($ids) && (int)$all->count() === (int)Order::find()->status(null)->count()
+        && $rule->matchElement($fixtures[Link::ORDER_NONE]) ?: 'narrowed';
 });
 
 // ---------------------------------------------------------------------------------------------
