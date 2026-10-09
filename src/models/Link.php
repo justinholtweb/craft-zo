@@ -40,6 +40,16 @@ class Link extends Model
     /** Deliberately not sent — an order below the sync threshold, a $0 payment, and so on. */
     public const STATUS_SKIPPED = 'skipped';
 
+    // Order statuses — where an order as a whole stands; see Links::orderStatuses()
+    // -------------------------------------------------------------------------
+
+    public const ORDER_SYNCED = 'synced';
+    public const ORDER_NOT_RECONCILED = 'notReconciled';
+    public const ORDER_FAILED = 'failed';
+    public const ORDER_PENDING = 'pending';
+    public const ORDER_SKIPPED = 'skipped';
+    public const ORDER_NONE = 'none';
+
     public ?int $id = null;
     public string $type = '';
     public string $craftKey = '';

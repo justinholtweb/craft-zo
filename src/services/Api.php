@@ -296,6 +296,14 @@ class Api extends Component
             return $this->request($method, $path, $options, $context, true);
         }
 
+        // Still refused with a freshly minted token: the token is fine and the grant behind it is
+        // not (revoked, or the wrong organization's). Somebody has to reconnect.
+        if ($status === 401 || $zohoCode === self::CODE_INVALID_TOKEN) {
+            Plugin::getInstance()->getAlerts()->noteAuthFailure($message !== ''
+                ? Craft::t('zo', 'Zoho Books refused the connection: {message}', ['message' => $message])
+                : Craft::t('zo', 'Zoho Books answered HTTP {status} to a freshly refreshed token.', ['status' => $status]));
+        }
+
         if ($status === 429 || $zohoCode === self::CODE_RATE_LIMIT || $zohoCode === self::CODE_RATE_LIMIT_ALT) {
             $isDaily = stripos($message, 'day') !== false;
             $this->log($action, LogEntry::LEVEL_WARNING, $method, $url, $status, $zohoCode, $started, $message, $options, $body, $context);
@@ -314,6 +322,7 @@ class Api extends Component
         // A 200 carrying a non-zero code is a failure however healthy the status line looks.
         if ($status >= 200 && $status < 300 && ($zohoCode === null || $zohoCode === 0)) {
             $this->log($action, LogEntry::LEVEL_INFO, $method, $url, $status, $zohoCode, $started, $message ?: 'OK', $options, $body, $context);
+            Plugin::getInstance()->getAlerts()->noteAuthSuccess();
 
             return $data;
         }

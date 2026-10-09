@@ -40,7 +40,7 @@ Everything below is in the one edition. There is no free tier and no feature to 
 | **Customers → contacts** | Matched against the contacts you already have, by email or by name, before one is created |
 | **Completed orders → invoices** | Promoted out of draft, so they count toward receivables |
 | **Reconciliation** | Every document's Zoho total checked against what Commerce charged, both numbers stored |
-| **Payments → customer payments** | Commerce payment transactions, applied against the invoice |
+| **Payments → customer payments** | Commerce payment transactions, applied against the invoice — into each gateway's own deposit account, with the processor's fee as bank charges if you want it |
 | **Refunds → credit notes** | Plus the cash movement, when a deposit account is configured |
 | **Products → Zoho items** | Matched by SKU, so sales-by-item reporting works |
 | **Sales orders** | Alongside invoices, or instead of them |
@@ -50,6 +50,8 @@ Everything below is in the one edition. There is no free tier and no feature to 
 | **Queue-driven syncing** | With exponential backoff, and retry from the CP or the console |
 | **Connection log** | Every call, with credentials redacted before the row is written |
 | **Sync screen and order panel** | What is in the books, what failed, and what does not reconcile |
+| **Orders index** | A Zoho Books column and filter on Commerce's own Orders index, and a bulk **Sync to Zoho Books** action |
+| **Failure alerts** | One email (or Slack/Teams message) when orders fail, a document does not reconcile or Zoho refuses the connection — and one when it clears |
 
 ---
 
@@ -132,7 +134,8 @@ Zo syncs an order when Commerce completes it, by default, through the queue. You
 payment, or when an order reaches particular statuses.
 
 Every order gets a panel on Commerce's own order edit screen showing what exists in Zoho, with
-**Sync now** and **Preview payload** buttons.
+**Sync now** and **Preview payload** buttons. The Orders index gets a **Zoho Books** column, a
+**Zoho Books status** filter, and a **Sync to Zoho Books** bulk action.
 
 ### Console
 
@@ -150,9 +153,27 @@ php craft zo/auth/refresh               # prove the refresh token still works
 php craft zo/auth/disconnect            # forget this environment's connection and revoke its token
 
 php craft zo/log/prune                  # honour the retention setting
+
+php craft zo/alerts/check               # evaluate failure alerts now (every sync does it too)
+php craft zo/alerts/test                # send a sample alert through every configured channel
 ```
 
 Plugin commands are listed under a bare `php craft help`, not under `php craft help zo`.
+
+### Alerts
+
+The Sync screen only helps if somebody looks. Zo emails the addresses in **Settings → Zo →
+Alerts** — and optionally posts to a Slack or Teams webhook — when:
+
+- **Orders fail to sync**: an order, payment, refund or customer that Zoho refused
+- **Documents do not reconcile**: a synced document whose Zoho total differs from Commerce's
+- **Zoho refuses the connection**: a revoked refresh token, or a 401 that refreshing did not fix
+
+One message when an incident starts, one when it clears, held through a quiet period if it flaps.
+Bodies are redacted and link straight to the Sync screen. The webhook URL goes through the same
+SSRF guard as the rest of the family: public hosts only, pinned, no redirects. A **Zoho Books
+health** Dashboard widget shows the same thing at a glance. See
+[Alerts](https://justinholt.com/plugins/craft-zo/docs/alerts).
 
 ---
 

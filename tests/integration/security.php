@@ -367,7 +367,9 @@ Craft::$app->getUserPermissions()->saveUserPermissions($viewer->id, ['accesscp',
 $cleanup['users'][] = $viewer;
 [$viewerHttp, $viewerPost] = client($viewer->username, $password);
 
-$order = Order::find()->isCompleted(true)->orderBy(['commerce_orders.dateOrdered' => SORT_DESC])->one();
+// One with an email: the check below looks for it in the response, and `str_contains($body, '')`
+// is always true — a sibling's test leaves email-less completed orders in this shared harness.
+$order = Order::find()->isCompleted(true)->email(':notempty:')->orderBy(['commerce_orders.dateOrdered' => SORT_DESC])->one();
 
 check('“View what has been synced” can’t read an order’s payload', function() use ($viewerHttp, $order) {
     $response = $viewerHttp->get("index.php?p=admin/actions/zo/sync/preview&orderId={$order->id}", ['headers' => ['Accept' => 'application/json']]);

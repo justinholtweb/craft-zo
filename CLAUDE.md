@@ -80,8 +80,49 @@ declares a single edition')` exists to make that a deliberate act rather than a 
   `refreshToken` setting is only an `$ENV` override, and a literal is refused unless it is the
   5.0.0 stored value — never rendered; the form posts `refreshTokenKept`.
 
+- `{{%zo_alerts}}` — failure-alert latches, one row per incident, unique on `incident` (Erpy's
+  table keyed on `(connectionId, incident)`; Zo has one connection per environment, so no column).
+
 Both totals live on the link (`craftTotal`, `zohoTotal`, `variance`) because the difference cannot
 be recomputed later from two systems that have both moved on.
+
+### Failure alerts (ported from Erpy, 2026-10-09)
+
+`services\Alerts` is a copy of craft-erpy's reference (its CLAUDE.md, "Failure alerts"), with the
+connection dimension dropped. Three incidents: **failures** (failed contact/invoice/salesorder/
+payment/refund links by `dateUpdated` inside `alertWindowMinutes`, threshold to open, a whole quiet
+window to close — items never count), **variance** (a synced link with |variance| > tolerance by
+`dateSynced` inside the window), **auth** (a pushed signal). Hooks: `Sync::syncOrder()` wraps the
+real work (`runSync()`) and calls `afterSync()` in a `finally`; `Api::handle()` signals a 401/code 57
+that survives the forced refresh and calls `noteAuthSuccess()` on every success;
+`Auth::getAccessToken()` signals an `OAuthRefusedException` (an `{"error":…}` body or a 4xx from the
+accounts server — never a network failure). `check()` does nothing until `getHasCredentials()`.
+Recoveries quote `standingCount()` because "nothing new for an hour" is not "fixed". Do not change
+when touching it: the conditional-UPDATE claim/release, redaction before anything leaves, the
+webhook through `webhookTarget()` (`helpers\Ip` is the family copy — keep it identical), the HMAC
+header, every path fail-open.
+
+### Order status (Orders index column and condition rule)
+
+`Links::orderStatuses()` (PHP, two queries per batch) and `Links::orderStatusCondition()` (SQL, for
+`ZohoStatusConditionRule::modifyQuery()`) define the same six sets in the same precedence —
+failed > notReconciled > synced > pending > skipped > none — and `tests/integration/orders.php`
+holds them to partitioning the fixtures identically. Change one, change both. A contact link points
+at the customer element, so a failed contact marks that customer's completed orders failed. The
+column memoises per request and is prefetched from `OrderQuery::EVENT_AFTER_POPULATE_ELEMENTS` on
+`element-indexes/*` requests only. The rule is registered unconditionally (a conditionally
+registered rule is dropped from saved conditions and the source widens to every order).
+
+### Deposit accounts and processor fees
+
+`Settings::$depositAccountMap` (gateway handle → account id, `$ENV`-able, a fourth private-backed
+map in `attributes()`) is resolved by `Documents::depositAccount()` for both `account_id` on a
+payment and `from_account_id` on a credit-note refund. `Documents::processorFee()` reads the fee
+from `$transaction->response` only — Stripe `balance_transaction` (minor units, zero-decimal list),
+PayPal v2 `seller_receivable_breakdown.paypal_fee`, NVP `FEEAMT` — ignores a fee in another
+currency than `$transaction->currency` or one ≥ the amount, then `EVENT_DEFINE_PROCESSOR_FEE` may
+override. Commerce Stripe stores the intent with an unexpanded charge, so most Stripe stores read
+no fee — documented, not faked. `recordProcessorFees` is off by default (double counting).
 
 ### Tax modes
 
@@ -154,6 +195,13 @@ credit-notes, creditnotes/refunds.
   until 5.0.1. `byId()` tries both; `security.php` checks every lookup resolves.
 - **A front-end template answers a POST without a CSRF token**, which is what lets
   `security.php` play Zoho's token endpoint with a throwaway template behind `accountsUrl`.
+- **Craft condition-rule operators are protected constants** — "is not one of" is the string `'ni'`
+  from outside the class, not `OPERATOR_NOT_IN` and not `'notIn'` (an unknown operator silently
+  behaves as "is one of").
+- **A captured email's `toString()` is quoted-printable**, which splits long lines with `=` and
+  breaks every `str_contains`. Read `$message->getSymfonyEmail()->getTextBody()` instead.
+- **`$row['col'] ?? 'x'` is `'x'` when the column is NULL** — the wrong tool for asserting a latch
+  column was released to null; use `array_key_exists`.
 - `plugin/switch-edition` is not a console command; switching editions from a script means
   `Plugins::switchEdition()` plus `ProjectConfig::saveModifiedConfigData()`.
 
@@ -213,6 +261,8 @@ No local PHP on this Mac. Everything runs inside the plugin-testing container:
 cd ~/Sites/plugin-testing
 ddev exec php /var/www/craft-zo/tests/integration/checks.php   # 106 checks (2 fail on the shared harness: see below)
 ddev exec php /var/www/craft-zo/tests/integration/security.php # 23: connect round trip with admin changes off, token storage, migration, permissions
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-zo/tests/integration/alerts.php  # 58: latch, mail, SSRF, webhook, auth signals, widget, console, test action over HTTP
+docker exec -w /var/www/html ddev-plugin-testing-web php /var/www/craft-zo/tests/integration/orders.php  # 42: status sets vs SQL, condition rule, column + action over HTTP, deposit accounts, fees
 docker exec -w /sites/craft-zo ddev-phpstan-runner-web bash -c 'vendor/bin/phpstan analyse --memory-limit=1G && vendor/bin/ecs check'
 ddev exec bash -c 'find /var/www/craft-zo/src -name "*.php" -print0 | xargs -0 -n1 php -l'
 ```
@@ -230,6 +280,11 @@ the next run recognises and clears it rather than snapshotting the pollution as 
 Two `checks.php` failures are the shared harness, not Zo (October 2026): another plugin redirects
 unknown 404s to `/contact`, so "an endpoint answering with HTML" gets a 200 page; and the harness has
 ~400 completed orders while the backfill check reads the oldest 200.
+
+`alerts.php` and `orders.php` share `tests/integration/_support.php` and keep every setting in
+memory (no project config writes); fixtures and alert rows are removed in a shutdown function.
+`security.php` picks an order *with an email* for its payload check: a sibling's test leaves
+email-less completed orders in the harness, and `str_contains($body, '')` is always true.
 
 Two things the suite has to do that are easy to get wrong:
 

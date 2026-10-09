@@ -516,6 +516,145 @@
     </div>
 </div>
 
+{{ forms.editableTableField({
+    label: 'Gateway → deposit account'|t('zo'),
+    instructions: 'Optional. A Zoho account id per gateway — Stripe’s clearing account, PayPal’s balance, the till for cash — used for that gateway’s payments and refunds instead of the deposit account above. Values may be environment variables.'|t('zo'),
+    id: 'depositAccountMap',
+    name: 'depositAccountMap',
+    cols: {
+        gateway: { heading: 'Gateway'|t('zo'), type: 'select', options: gatewayOptions },
+        accountId: { heading: 'Zoho account ID'|t('zo'), type: 'singleline', code: true }
+    },
+    rows: depositAccountRows,
+    addRowLabel: 'Add an account'|t('zo'),
+    allowAdd: true,
+    allowDelete: true,
+    allowReorder: false
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Record processor fees as bank charges'|t('zo'),
+    instructions: 'Sends the fee Stripe or PayPal kept as the payment’s bank charges, so the deposit in Zoho matches the payout on the statement. Read from the gateway’s stored response; a payment whose response does not carry the fee is recorded without one. Leave off if you already book fees from the payout report.'|t('zo'),
+    id: 'recordProcessorFees',
+    name: 'recordProcessorFees',
+    on: settings.recordProcessorFees
+}) }}
+
+{# ------------------------------------------------------------------ #}
+<hr>
+<h2>{{ 'Alerts'|t('zo') }}</h2>
+
+<p class="light">{{ 'One message when something goes wrong, one when it has cleared — never one per failure. Checked after every sync, the moment Zoho refuses the connection, and by `php craft zo/alerts/check`.'|t('zo') }}</p>
+
+{{ forms.autosuggestField({
+    label: 'Email alerts to'|t('zo'),
+    instructions: 'Addresses separated by commas, or an environment variable. Leave empty for no email.'|t('zo'),
+    id: 'alertRecipients',
+    name: 'alertRecipients',
+    suggestEnvVars: true,
+    value: settings.alertRecipients,
+    errors: settings.getErrors('alertRecipients')
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'Slack or Teams webhook URL'|t('zo'),
+    instructions: 'Optional. An incoming-webhook URL — best kept in an environment variable, because the URL is the credential. Only public hosts are allowed and redirects are never followed.'|t('zo'),
+    id: 'alertWebhookUrl',
+    name: 'alertWebhookUrl',
+    suggestEnvVars: true,
+    value: settings.alertWebhookUrl,
+    errors: settings.getErrors('alertWebhookUrl')
+}) }}
+
+{{ forms.selectField({
+    label: 'Webhook format'|t('zo'),
+    id: 'alertWebhookFormat',
+    name: 'alertWebhookFormat',
+    options: [
+        { value: 'slack', label: 'Slack'|t('zo') },
+        { value: 'teams', label: 'Microsoft Teams'|t('zo') },
+        { value: 'json', label: 'Plain JSON (your own receiver)'|t('zo') },
+    ],
+    value: settings.alertWebhookFormat,
+    errors: settings.getErrors('alertWebhookFormat')
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'Webhook signing secret'|t('zo'),
+    instructions: 'Optional. When set, each webhook carries `X-Zo-Timestamp` and `X-Zo-Signature: sha256=…`, an HMAC of `timestamp.body`, so your own receiver can verify it. Slack and Teams ignore it.'|t('zo'),
+    id: 'alertWebhookSecret',
+    name: 'alertWebhookSecret',
+    suggestEnvVars: true,
+    value: settings.alertWebhookSecret
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Alert when orders fail to sync'|t('zo'),
+    instructions: 'Orders, payments, refunds or customers Zoho refused. Items never alert: they are best-effort.'|t('zo'),
+    id: 'alertOnFailures',
+    name: 'alertOnFailures',
+    on: settings.alertOnFailures,
+    toggle: 'zo-alert-failures'
+}) }}
+
+<div id="zo-alert-failures" class="{{ settings.alertOnFailures ? '' : 'hidden' }}">
+    {{ forms.textField({
+        label: 'Failures that open an alert'|t('zo'),
+        instructions: 'This many failures inside the window below. It closes again after a whole window with none.'|t('zo'),
+        id: 'alertFailureThreshold',
+        name: 'alertFailureThreshold',
+        type: 'number',
+        size: 5,
+        value: settings.alertFailureThreshold,
+        errors: settings.getErrors('alertFailureThreshold')
+    }) }}
+</div>
+
+{{ forms.lightswitchField({
+    label: 'Alert when a document does not reconcile'|t('zo'),
+    instructions: 'A document whose Zoho total differs from Commerce’s by more than the variance tolerance.'|t('zo'),
+    id: 'alertOnVariance',
+    name: 'alertOnVariance',
+    on: settings.alertOnVariance
+}) }}
+
+{{ forms.textField({
+    label: 'Window'|t('zo'),
+    instructions: 'Minutes. Failures and unreconciled documents are counted inside it; an incident clears after a whole window with nothing new.'|t('zo'),
+    id: 'alertWindowMinutes',
+    name: 'alertWindowMinutes',
+    type: 'number',
+    size: 5,
+    value: settings.alertWindowMinutes,
+    errors: settings.getErrors('alertWindowMinutes')
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Alert when Zoho refuses the connection'|t('zo'),
+    instructions: 'A refused refresh token, or a 401 that refreshing did not fix. Nothing syncs until somebody reconnects.'|t('zo'),
+    id: 'alertOnAuthFailure',
+    name: 'alertOnAuthFailure',
+    on: settings.alertOnAuthFailure
+}) }}
+
+{{ forms.textField({
+    label: 'Quiet period after a recovery'|t('zo'),
+    instructions: 'Minutes. An incident that comes straight back is reported when this ends, if it is still happening — so a flapping connection cannot fill an inbox.'|t('zo'),
+    id: 'alertCooldownMinutes',
+    name: 'alertCooldownMinutes',
+    type: 'number',
+    size: 5,
+    value: settings.alertCooldownMinutes,
+    errors: settings.getErrors('alertCooldownMinutes')
+}) }}
+
+{% if currentUser and currentUser.admin %}
+    <div class="field">
+        <button type="button" class="btn" id="zo-test-alert">{{ 'Send a test alert'|t('zo') }}</button>
+        <span id="zo-test-alert-note" class="light">{{ 'Uses the saved settings — save first.'|t('zo') }}</span>
+    </div>
+{% endif %}
+
 {# ------------------------------------------------------------------ #}
 <hr>
 <h2>{{ 'Transport and logging'|t('zo') }}</h2>
@@ -648,6 +787,10 @@
                 : {{ 'Zoho would total this differently'|t('zo')|json_encode|raw }}),
             !data.matches
         );
+    });
+
+    bind('zo-test-alert', 'POST', 'zo/alerts/test', function(data) {
+        note('zo-test-alert-note', data.message, false);
     });
 
     var disconnect = byId('zo-disconnect');

@@ -1,5 +1,40 @@
 # Release Notes for Zo
 
+## Unreleased
+
+### Added
+
+- Failure alerts. Zo now emails the addresses in **Settings → Zo → Alerts** — and can post to a
+  Slack or Teams incoming webhook, or a signed JSON one — when orders fail to sync, when a synced
+  document does not reconcile, or when Zoho refuses the connection (a revoked refresh token, or a
+  401 that refreshing does not fix). One message when it starts, one when it clears, with a quiet
+  period for a connection that flaps. Checked after every sync, so no cron is needed. Bodies are
+  redacted and link to the Sync screen filtered to the problem. The webhook URL is held to the
+  family SSRF rules: public hosts only, the connection pinned to the checked address, no redirects.
+- A **Zoho Books health** Dashboard widget: connected or not, synced, failed and not-reconciled
+  counts, orders awaiting sync, and any open incident.
+- `php craft zo/alerts/check` and `php craft zo/alerts/test`, and an admin-only **Send a test
+  alert** button. `zo/sync/retry` now runs the check too.
+- A **Zoho Books** column on Commerce's Orders index — synced, not reconciled, failed, pending,
+  skipped or not synced — and a matching **Zoho Books status** condition rule, so the Orders index
+  can be filtered (or a custom source built) on it.
+- A **Sync to Zoho Books** bulk action on the Orders index, for people with *Sync orders to Zoho
+  Books*. It queues each selected completed order; documents already in Zoho are reused, never
+  resent.
+- **Gateway → deposit account**: each Commerce gateway can deposit into (and refund from) its own
+  Zoho account — Stripe's clearing account, PayPal's balance — instead of the one deposit account.
+- **Record processor fees as bank charges** (off by default). The fee Stripe or PayPal kept is sent
+  as the customer payment's `bank_charges`, so the deposit in Zoho matches the payout. It is read
+  from the gateway's stored response — Stripe's balance transaction, PayPal's
+  `seller_receivable_breakdown`, PayPal Express's `FEEAMT` — and `Documents::EVENT_DEFINE_PROCESSOR_FEE`
+  supplies or vetoes one for any other gateway.
+- `Alerts::EVENT_BEFORE_NOTIFY`, to reword or suppress an alert.
+
+### Changed
+
+- A 4xx from Zoho's accounts server while refreshing the token is now treated as a refusal (not
+  retried as a network failure), and recorded in the log with its status.
+
 ## 5.0.1 - 2026-10-04
 
 > {warning} Zo now stores the Zoho refresh token in its own database table, encrypted, instead of in its settings — which are project config, committed with your site — and each environment connects for itself. Upgrading copies an existing token across so syncing keeps working; then connect once on each environment that syncs, open **Settings → Zo**, tick **Remove it from project config** and save. If the repository has been shared, disconnect first, which revokes the old token. Previewing an order's payload now also needs permission to view that order, and clearing the log is admin-only.

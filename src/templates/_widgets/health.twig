@@ -1,0 +1,57 @@
+{# The Dashboard tile. `overview` comes from Alerts::overview(). #}
+{% set stats = overview.stats %}
+
+{% if not overview.connected %}
+    <p class="error">{{ 'Zo is not connected to Zoho Books.'|t('zo') }}
+        {% if currentUser.admin %}<a href="{{ cpUrl('settings/plugins/zo') }}">{{ 'Connect'|t('zo') }}</a>{% endif %}
+    </p>
+{% endif %}
+
+{% for incident in overview.incidents %}
+    <p class="error" title="{{ incident.detail }}">{{ incident.label }}</p>
+{% endfor %}
+
+<table class="data fullwidth">
+    <tbody>
+        <tr>
+            <th scope="row">{{ 'Synced'|t('zo') }}</th>
+            <td>{{ stats.synced|number }}</td>
+        </tr>
+        <tr>
+            <th scope="row">{{ 'Failed'|t('zo') }}</th>
+            <td>
+                {% if stats.failed %}
+                    <a href="{{ cpUrl('zo/sync', { status: 'failed' }) }}" class="error">{{ stats.failed|number }}</a>
+                {% else %}
+                    <span class="light">0</span>
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">{{ 'Not reconciled'|t('zo') }}</th>
+            <td>
+                {% if stats.variance %}
+                    <a href="{{ cpUrl('zo/sync', { status: 'variance' }) }}" class="error">{{ stats.variance|number }}</a>
+                {% else %}
+                    <span class="light">0</span>
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">{{ 'Orders awaiting sync'|t('zo') }}</th>
+            <td>{{ overview.unsynced.count|number }}{{ overview.unsynced.exact ? '' : '+' }}</td>
+        </tr>
+        <tr>
+            <th scope="row">{{ 'Last invoice'|t('zo') }}</th>
+            <td>
+                {% if overview.lastSynced %}
+                    {{ date(overview.lastSynced ~ ' UTC')|timestamp('short') }}
+                {% else %}
+                    <span class="light">{{ 'Never'|t('zo') }}</span>
+                {% endif %}
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<p><a href="{{ cpUrl('zo/sync') }}">{{ 'Open the Sync screen'|t('zo') }}</a></p>

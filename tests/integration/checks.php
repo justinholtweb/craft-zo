@@ -1679,6 +1679,8 @@ try {
     try {
         Craft::$app->getDb()->createCommand()->delete(Table::LINKS)->execute();
         Craft::$app->getDb()->createCommand()->delete(Table::LOG)->execute();
+        // Every failing scenario above also opened an alert latch.
+        Craft::$app->getDb()->createCommand()->delete(Table::ALERTS)->execute();
     } catch (Throwable $e) {
         echo "  ! could not clear Zo's tables: {$e->getMessage()}\n";
     }

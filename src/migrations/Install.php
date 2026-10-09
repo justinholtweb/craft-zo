@@ -20,6 +20,9 @@ class Install extends Migration
         $this->createIndexes();
         $this->addForeignKeys();
 
+        // Failure alerts (5.1.0). Defined once, in the migration that added it.
+        m261009_000000_alerts::createAlertsTable($this);
+
         return true;
     }
 
@@ -28,6 +31,7 @@ class Install extends Migration
      */
     public function safeDown(): bool
     {
+        $this->dropTableIfExists(Table::ALERTS);
         $this->dropTableIfExists(Table::CONNECTION);
         $this->dropTableIfExists(Table::LOG);
         $this->dropTableIfExists(Table::LINKS);

@@ -4,6 +4,7 @@ namespace justinholtweb\zo\services;
 
 use Craft;
 use craft\base\Component;
+use craft\commerce\db\Table as CommerceTable;
 use craft\db\Query;
 use craft\helpers\Db;
 use craft\helpers\StringHelper;
@@ -28,6 +29,9 @@ class Links extends Component
      * The columns a link is read from. Listed rather than `SELECT *` so a future column cannot
      * silently start being passed into the model's constructor.
      */
+    /** @var array<int, string> order id => status, for the life of the request */
+    private array $_orderStatuses = [];
+
     private const COLUMNS = [
         'id', 'type', 'craftKey', 'elementId', 'zohoId', 'zohoNumber', 'status', 'attempts',
         'lastError', 'craftTotal', 'zohoTotal', 'variance', 'dateSynced', 'dateCreated',
@@ -330,6 +334,224 @@ class Links extends Component
         return array_map(static fn(array $row) => new Link($row), $rows);
     }
 
+    // Order status (the Orders index column and condition rule)
+    // =========================================================================
+
+    /**
+     * Where an order stands with Zoho Books, as a single word for the Orders index.
+     *
+     * In precedence order; {@see orderStatusCondition()} builds exactly the same sets in SQL, for
+     * the condition rule, and the test suite holds the two to agreeing:
+     *
+     * - `failed` — any of its documents failed: the customer, the invoice or sales order, a
+     *   payment or a refund. The customer link belongs to the order's customer element (Commerce 5
+     *   gives guests one too), so a customer failure counts for that customer's completed orders.
+     * - `notReconciled` — its document synced but Zoho's total disagrees with Commerce's.
+     * - `synced` — its document is in Zoho Books and reconciles.
+     * - `pending` — claimed and not yet sent.
+     * - `skipped` — deliberately not sent.
+     * - `none` — never synced.
+     *
+     * @param int[] $orderIds
+     * @return array<int, string> order id => status
+     */
+    public function orderStatuses(array $orderIds): array
+    {
+        $orderIds = array_values(array_unique(array_filter(array_map('intval', $orderIds))));
+
+        if ($orderIds === []) {
+            return [];
+        }
+
+        $tolerance = Plugin::getInstance()->getSettings()->varianceTolerance;
+        $failed = [];
+        $documents = [];
+
+        // Two queries for any number of orders — this runs for every row of the Orders index.
+        $rows = (new Query())
+            ->select(['elementId', 'type', 'status', 'variance'])
+            ->from([Table::LINKS])
+            ->where([
+                'elementId' => $orderIds,
+                'type' => [Link::TYPE_INVOICE, Link::TYPE_SALESORDER, Link::TYPE_PAYMENT, Link::TYPE_REFUND],
+            ])
+            ->all();
+
+        foreach ($rows as $row) {
+            $id = (int)$row['elementId'];
+
+            if ($row['status'] === Link::STATUS_FAILED) {
+                $failed[$id] = true;
+            }
+
+            if (in_array($row['type'], [Link::TYPE_INVOICE, Link::TYPE_SALESORDER], true)) {
+                $documents[$id][] = $row;
+            }
+        }
+
+        foreach ($this->contactFailureQuery()->andWhere(['o.id' => $orderIds])->column() as $id) {
+            $failed[(int)$id] = true;
+        }
+
+        $statuses = [];
+
+        foreach ($orderIds as $id) {
+            $seen = [];
+
+            foreach ($documents[$id] ?? [] as $row) {
+                $seen[$row['status']] = true;
+
+                if ($row['status'] === Link::STATUS_SYNCED && $row['variance'] !== null && abs((float)$row['variance']) > $tolerance) {
+                    $seen['variance'] = true;
+                }
+            }
+
+            $statuses[$id] = match (true) {
+                isset($failed[$id]) => Link::ORDER_FAILED,
+                isset($seen['variance']) => Link::ORDER_NOT_RECONCILED,
+                isset($seen[Link::STATUS_SYNCED]) => Link::ORDER_SYNCED,
+                isset($seen[Link::STATUS_PENDING]) => Link::ORDER_PENDING,
+                isset($seen[Link::STATUS_SKIPPED]) => Link::ORDER_SKIPPED,
+                default => Link::ORDER_NONE,
+            };
+        }
+
+        return $statuses;
+    }
+
+    /**
+     * One order's status, from a per-request memo that {@see prefetchOrderStatuses()} fills for a
+     * whole index page at once.
+     */
+    public function orderStatus(int $orderId): string
+    {
+        if (!isset($this->_orderStatuses[$orderId])) {
+            $this->prefetchOrderStatuses([$orderId]);
+        }
+
+        return $this->_orderStatuses[$orderId] ?? Link::ORDER_NONE;
+    }
+
+    /**
+     * @param int[] $orderIds
+     */
+    public function prefetchOrderStatuses(array $orderIds): void
+    {
+        $missing = array_diff(array_map('intval', $orderIds), array_keys($this->_orderStatuses));
+
+        if ($missing !== []) {
+            $this->_orderStatuses = $this->orderStatuses($missing) + $this->_orderStatuses;
+        }
+    }
+
+    /**
+     * Forget the memo — after a sync changes what it would say.
+     */
+    public function resetOrderStatusCache(): void
+    {
+        $this->_orderStatuses = [];
+    }
+
+    /**
+     * @return array<string, string> status => label
+     */
+    public static function orderStatusOptions(): array
+    {
+        return [
+            Link::ORDER_SYNCED => Craft::t('zo', 'Synced'),
+            Link::ORDER_NOT_RECONCILED => Craft::t('zo', 'Not reconciled'),
+            Link::ORDER_FAILED => Craft::t('zo', 'Failed'),
+            Link::ORDER_PENDING => Craft::t('zo', 'Pending'),
+            Link::ORDER_SKIPPED => Craft::t('zo', 'Skipped'),
+            Link::ORDER_NONE => Craft::t('zo', 'Not synced'),
+        ];
+    }
+
+    /**
+     * A WHERE condition on an order id column that is true for orders in exactly this status.
+     *
+     * Each status excludes every status above it in precedence, so the six sets partition the
+     * orders: an order is in one of them and only one.
+     *
+     * @return array<int|string, mixed>
+     */
+    public function orderStatusCondition(string $status, string $idColumn = 'elements.id'): array
+    {
+        $failed = ['in', $idColumn, $this->failedOrdersSubquery()];
+        $notFailed = ['not in', $idColumn, $this->failedOrdersSubquery()];
+        $variance = ['in', $idColumn, $this->documentSubquery(Link::STATUS_SYNCED, true)];
+        $synced = ['in', $idColumn, $this->documentSubquery(Link::STATUS_SYNCED)];
+        $pending = ['in', $idColumn, $this->documentSubquery(Link::STATUS_PENDING)];
+        $skipped = ['in', $idColumn, $this->documentSubquery(Link::STATUS_SKIPPED)];
+
+        return match ($status) {
+            Link::ORDER_FAILED => $failed,
+            Link::ORDER_NOT_RECONCILED => ['and', $variance, $notFailed],
+            Link::ORDER_SYNCED => ['and', $synced, ['not', $variance], $notFailed],
+            Link::ORDER_PENDING => ['and', $pending, ['not', $synced], $notFailed],
+            Link::ORDER_SKIPPED => ['and', $skipped, ['not', $synced], ['not', $pending], $notFailed],
+            Link::ORDER_NONE => ['and', ['not in', $idColumn, $this->documentSubquery(null)], $notFailed],
+            // An unknown status matches nothing, rather than everything.
+            default => ['in', $idColumn, (new Query())->select(['elementId'])->from([Table::LINKS])->where('0=1')],
+        };
+    }
+
+    /**
+     * Order ids with an invoice or sales order link, optionally in one status and out of balance.
+     */
+    private function documentSubquery(?string $status, bool $varianceOnly = false): Query
+    {
+        $query = (new Query())
+            ->select(['elementId'])
+            ->from([Table::LINKS])
+            ->where(['type' => [Link::TYPE_INVOICE, Link::TYPE_SALESORDER]])
+            ->andWhere(['not', ['elementId' => null]]);
+
+        if ($status !== null) {
+            $query->andWhere(['status' => $status]);
+        }
+
+        if ($varianceOnly) {
+            $tolerance = Plugin::getInstance()->getSettings()->varianceTolerance;
+            $query->andWhere(['not', ['variance' => null]])
+                ->andWhere(['or', ['>', 'variance', $tolerance], ['<', 'variance', -$tolerance]]);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Order ids with a failed document, or whose customer's contact failed.
+     */
+    private function failedOrdersSubquery(): Query
+    {
+        $documents = (new Query())
+            ->select(['elementId'])
+            ->from([Table::LINKS])
+            ->where([
+                'type' => [Link::TYPE_INVOICE, Link::TYPE_SALESORDER, Link::TYPE_PAYMENT, Link::TYPE_REFUND],
+                'status' => Link::STATUS_FAILED,
+            ])
+            ->andWhere(['not', ['elementId' => null]]);
+
+        return $documents->union($this->contactFailureQuery(), true);
+    }
+
+    /**
+     * Completed orders whose customer's contact link failed. A contact link points at the customer
+     * (a user element), not the order: an order whose customer could not be created never got as
+     * far as claiming an invoice link, so without this it would read as "not synced", not "failed".
+     */
+    private function contactFailureQuery(): Query
+    {
+        return (new Query())
+            ->select(['o.id'])
+            ->from(['o' => CommerceTable::ORDERS])
+            ->innerJoin(['l' => Table::LINKS], '[[l.elementId]] = [[o.customerId]]')
+            ->where(['l.type' => Link::TYPE_CONTACT, 'l.status' => Link::STATUS_FAILED])
+            ->andWhere(['o.isCompleted' => true]);
+    }
+
     // Private
     // =========================================================================
 
@@ -376,6 +598,7 @@ class Links extends Component
         }
 
         $columns['dateUpdated'] = Db::prepareDateForDb(new DateTime());
+        $this->_orderStatuses = [];
 
         Craft::$app->getDb()->createCommand()
             ->update(Table::LINKS, $columns, ['id' => $link->id])

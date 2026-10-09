@@ -156,6 +156,7 @@ class SyncController extends Controller
 
         if ($links === []) {
             $this->stdout('Nothing to retry.' . PHP_EOL, Console::FG_GREEN);
+            $this->checkAlerts();
 
             return ExitCode::OK;
         }
@@ -184,7 +185,21 @@ class SyncController extends Controller
             }
         }
 
+        $this->checkAlerts();
+
         return $failed === 0 ? ExitCode::OK : ExitCode::UNSPECIFIED_ERROR;
+    }
+
+    /**
+     * Cron runs this when nothing else is running, so it is where an incident is seen to clear.
+     */
+    private function checkAlerts(): void
+    {
+        foreach (Plugin::getInstance()->getAlerts()->check() as $result) {
+            if ($result['transition'] !== null) {
+                $this->stdout(sprintf('Alert %s: %s%s', $result['transition'], $result['incident'], PHP_EOL), Console::FG_YELLOW);
+            }
+        }
     }
 
     /**

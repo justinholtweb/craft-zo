@@ -119,6 +119,51 @@ unrecognised country is dropped silently by Zoho.
 - **Default payment mode** and the **gateway map** — Zoho's `payment_mode` is a closed vocabulary
   of seven values and anything else is rejected outright, so map your Commerce gateway handles onto
   it rather than hoping.
+- **Gateway → deposit account** — optional, one Zoho account id per gateway (or an `$ENV`
+  reference). Stripe pays out to a clearing account, PayPal holds a balance of its own, cash on
+  delivery lands in the till: with one deposit account for all of them, every bank reconciliation
+  starts with a manual transfer. A mapped gateway's payments land in its account and its refunds
+  are paid from it; an unmapped one uses the deposit account above.
+- **Record processor fees as bank charges** — off by default. When on, the fee the processor kept
+  is sent as the customer payment's `bank_charges`: Zoho deposits the amount less the fee and books
+  the fee as a bank charge, so the deposit matches the payout on the statement. Leave it off if you
+  already book fees from the payout report, or they will be counted twice.
+
+### Where the fee comes from
+
+Zo reads it from what the gateway stored on the Commerce transaction; it never calls the processor.
+
+| Gateway | Where the fee is |
+|---|---|
+| Stripe | the charge's `balance_transaction.fee`, in minor units — present only when the charge was expanded: a Charge, a PaymentIntent's `latest_charge`, or the older `charges.data` |
+| PayPal Checkout | `seller_receivable_breakdown.paypal_fee` on the capture |
+| PayPal Express | `PAYMENTINFO_0_FEEAMT` or `FEEAMT` |
+
+Commerce's Stripe gateway usually stores the payment intent with its charge as a bare id, so for
+most Stripe stores there is **no fee to read** and the payment is recorded without one. A fee in a
+different currency from the payment (Stripe reports it in the *settlement* currency) is ignored
+rather than converted, and so is anything not smaller than the payment. For any other gateway, or
+to fetch Stripe's fee yourself, supply it from an event:
+
+```php
+use justinholtweb\zo\events\ProcessorFeeEvent;
+use justinholtweb\zo\services\Documents;
+
+Event::on(Documents::class, Documents::EVENT_DEFINE_PROCESSOR_FEE, function(ProcessorFeeEvent $e) {
+    // $e->transaction is the Commerce transaction; $e->fee is what Zo read, or null.
+    // Set a positive amount in the transaction's currency, or null for no fee.
+    $e->fee ??= MyFees::lookup($e->transaction->reference);
+});
+```
+
+Payments stay idempotent per Commerce transaction: re-syncing an order never records a payment —
+or its fee — twice.
+
+## Alerts
+
+Who is told when something goes wrong — orders failing to sync, documents that do not reconcile,
+Zoho refusing the connection — by email and optionally Slack or Teams. One message when it starts,
+one when it clears. Every setting is on the [Alerts](../alerts) page.
 
 ## Custom fields
 

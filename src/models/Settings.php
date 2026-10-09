@@ -18,6 +18,7 @@ use justinholtweb\zo\Plugin;
  * @property array<string, string> $customFields  field handle => template
  * @property array<string, string> $taxMap        tax category => Zoho tax id
  * @property array<string, string> $paymentModeMap gateway => Zoho payment mode
+ * @property array<string, string> $depositAccountMap gateway => Zoho deposit account id
  */
 class Settings extends Model
 {
@@ -252,6 +253,29 @@ class Settings extends Model
     /** Zoho chart-of-accounts id the payment is deposited into. Blank uses Zoho's default. */
     public string $depositAccountId = '';
 
+    /**
+     * Commerce gateway handle => Zoho deposit account id, overriding {@see $depositAccountId} for
+     * that gateway's payments and refunds.
+     *
+     * Stripe pays out to one clearing account, PayPal holds a balance of its own, cash on delivery
+     * lands in the till: one deposit account for all of them makes every bank reconciliation a
+     * manual transfer between accounts. Values may be `$ENV` references.
+     *
+     * @var array<string, string>
+     */
+    private array $_depositAccountMap = [];
+
+    /**
+     * Send the payment processor's fee as the customer payment's `bank_charges`, when the
+     * gateway's stored response carries it (Stripe's balance transaction, PayPal's
+     * `seller_receivable_breakdown`) or a handler on `Documents::EVENT_DEFINE_PROCESSOR_FEE`
+     * supplies it.
+     *
+     * Off by default: a store that already books its fees from the payout report would count them
+     * twice.
+     */
+    public bool $recordProcessorFees = false;
+
     // Transport
     // -------------------------------------------------------------------------
 
@@ -277,6 +301,50 @@ class Settings extends Model
 
     /** Days of log history to keep. 0 keeps everything. */
     public int $logRetentionDays = 30;
+
+    // Alerts
+    // -------------------------------------------------------------------------
+    // Nothing here is `required`: an empty recipient list and an empty webhook URL simply mean
+    // nobody is told, and a fresh install must be able to save every other setting.
+
+    /** Comma- or newline-separated addresses, or an `$ENV` reference that resolves to them. */
+    public string $alertRecipients = '';
+
+    /** A Slack or Teams incoming-webhook URL (or `$ENV`). Sent through the SSRF guard. */
+    public string $alertWebhookUrl = '';
+
+    /** `slack`, `teams` or `json` — the shape of the webhook body. */
+    public string $alertWebhookFormat = 'slack';
+
+    /** Optional. When set, the webhook carries an `X-Zo-Signature` HMAC of its body. */
+    public string $alertWebhookSecret = '';
+
+    /** Orders, payments, refunds or customers failing to sync. */
+    public bool $alertOnFailures = true;
+
+    /**
+     * This many failures inside the window opens the incident. One by default: every failure is an
+     * order that is not in the books.
+     */
+    public int $alertFailureThreshold = 1;
+
+    /** The window failures and unreconciled documents are counted in, in minutes. */
+    public int $alertWindowMinutes = 60;
+
+    /** A document whose Zoho total disagrees with Commerce's by more than the variance tolerance. */
+    public bool $alertOnVariance = true;
+
+    /** Zoho refusing the refresh token, or a 401 that refreshing did not fix. */
+    public bool $alertOnAuthFailure = true;
+
+    /** An incident that reopens this soon after its recovery message waits out the rest. */
+    public int $alertCooldownMinutes = 60;
+
+    /**
+     * Config-file only: let the alert webhook reach private, loopback and link-local hosts (a
+     * self-hosted Mattermost on the LAN). The scheme and no-redirect rules still hold.
+     */
+    public bool $allowPrivateAlertWebhookHosts = false;
 
     /**
      * @inheritdoc
@@ -309,11 +377,71 @@ class Settings extends Model
             [
                 [
                     'syncOnStatusHandles', 'eligibleStatusHandles', 'customFields', 'taxMap',
-                    'paymentModeMap',
+                    'paymentModeMap', 'depositAccountMap',
                 ],
                 'safe',
             ],
+            [['recordProcessorFees', 'alertOnFailures', 'alertOnVariance', 'alertOnAuthFailure', 'allowPrivateAlertWebhookHosts'], 'boolean'],
+            [['alertFailureThreshold'], 'integer', 'min' => 1, 'max' => 10000],
+            [['alertWindowMinutes'], 'integer', 'min' => 5, 'max' => 10080],
+            [['alertCooldownMinutes'], 'integer', 'min' => 0, 'max' => 10080],
+            [['alertWebhookFormat'], 'in', 'range' => ['slack', 'teams', 'json']],
+            [['alertRecipients', 'alertWebhookUrl', 'alertWebhookSecret'], 'string', 'max' => 2000],
+            [['alertRecipients'], 'validateRecipients'],
+            [['alertWebhookUrl'], 'validateWebhookUrl'],
         ];
+    }
+
+    /**
+     * Every address must be one, when there are any. An `$ENV` reference that is not set yet is
+     * allowed — a staging site legitimately has no recipients.
+     */
+    public function validateRecipients(string $attribute): void
+    {
+        foreach ($this->recipientList(false) as $address) {
+            if (filter_var($address, FILTER_VALIDATE_EMAIL) === false) {
+                $this->addError($attribute, Craft::t('zo', '“{address}” is not an email address.', ['address' => $address]));
+            }
+        }
+    }
+
+    /**
+     * Only the shape is checked here. Where the host resolves is checked at send time, every time,
+     * because DNS can change between a save and a send.
+     */
+    public function validateWebhookUrl(string $attribute): void
+    {
+        $url = trim((string)App::parseEnv($this->alertWebhookUrl));
+
+        if ($url === '' || str_starts_with($url, '$')) {
+            return;
+        }
+
+        $scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
+
+        if (!in_array($scheme, ['http', 'https'], true) || !parse_url($url, PHP_URL_HOST)) {
+            $this->addError($attribute, Craft::t('zo', 'Only http:// and https:// webhook URLs are allowed.'));
+        }
+    }
+
+    /**
+     * The alert recipients, with `$ENV` resolved.
+     *
+     * @return string[]
+     */
+    public function recipientList(bool $validOnly = true): array
+    {
+        $raw = trim((string)App::parseEnv($this->alertRecipients));
+
+        if ($raw === '' || str_starts_with($raw, '$')) {
+            return [];
+        }
+
+        $list = array_values(array_unique(array_filter(array_map('trim', preg_split('/[\s,;]+/', $raw) ?: []))));
+
+        return $validOnly
+            ? array_values(array_filter($list, static fn(string $a) => filter_var($a, FILTER_VALIDATE_EMAIL) !== false))
+            : $list;
     }
 
     /**
@@ -397,6 +525,46 @@ class Settings extends Model
         return self::toRows($this->_paymentModeMap, 'gateway', 'mode');
     }
 
+    public function setDepositAccountMap(mixed $value): void
+    {
+        $this->_depositAccountMap = self::normalizeMap($value, 'gateway', 'accountId');
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function getDepositAccountMap(): array
+    {
+        return $this->_depositAccountMap;
+    }
+
+    /**
+     * @return array<int, array{gateway: string, accountId: string}>
+     */
+    public function getDepositAccountMapRows(): array
+    {
+        return self::toRows($this->_depositAccountMap, 'gateway', 'accountId');
+    }
+
+    /**
+     * The Zoho account a gateway's money lands in (and refunds leave from): its own mapping, else
+     * the default deposit account, else empty — which lets Zoho choose for a payment and skips the
+     * cash half of a refund.
+     */
+    public function getDepositAccountFor(?string $gatewayHandle): string
+    {
+        $mapped = $gatewayHandle !== null ? ($this->_depositAccountMap[$gatewayHandle] ?? '') : '';
+        $mapped = trim((string)App::parseEnv($mapped));
+
+        if ($mapped !== '' && !str_starts_with($mapped, '$')) {
+            return $mapped;
+        }
+
+        $default = trim((string)App::parseEnv($this->depositAccountId));
+
+        return str_starts_with($default, '$') ? '' : $default;
+    }
+
     /**
      * Accept either shape: the row list an editable table posts, or the map that comes back out of
      * project config on the next request.
@@ -451,12 +619,12 @@ class Settings extends Model
      * @inheritdoc
      *
      * Craft persists plugin settings by iterating the model's attributes, and Yii does not count a
-     * private property as one. Without this the three maps above would save as nothing at all —
+     * private property as one. Without this the four maps above would save as nothing at all —
      * the screen reporting success while every mapping was discarded.
      */
     public function attributes(): array
     {
-        return array_merge(parent::attributes(), ['customFields', 'taxMap', 'paymentModeMap']);
+        return array_merge(parent::attributes(), ['customFields', 'taxMap', 'paymentModeMap', 'depositAccountMap']);
     }
 
     // Parsed credentials

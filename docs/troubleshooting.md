@@ -97,6 +97,31 @@ that matters for your books — and stops.
 
 **Fix:** set the deposit account in the payments section, then re-run the refund's sync.
 
+## Payments were recorded without a bank charge
+
+**Record processor fees as bank charges** is on, but the fee was not in what the gateway stored.
+Commerce's Stripe gateway usually saves the payment intent with its charge as a bare id rather than
+the charge's balance transaction, and that is where Stripe keeps the fee. Zo reads stored responses
+only and never calls the processor, so it records the payment without one rather than guess. Supply
+the fee from `Documents::EVENT_DEFINE_PROCESSOR_FEE` — see
+[Configuration](../configuration#where-the-fee-comes-from). A fee in a different currency from the
+payment is also skipped on purpose.
+
+## No alert arrived
+
+Press **Send a test alert** under **Settings → Zo → Alerts** (or run `php craft zo/alerts/test`).
+It reports email and webhook separately.
+
+- **Email failed** — Zo sends through Craft's own mailer; check **Settings → Email**.
+- **Webhook refused** — the URL must be `http`/`https`, carry no username or password, and resolve
+  only to public addresses. A Mattermost on your own network needs `allowPrivateAlertWebhookHosts`
+  in `config/zo.php`.
+- **Nothing to send** — an `$ENV` reference that is not set on this environment means nobody.
+
+An incident sends one message when it starts and one when it clears, not one per failure — if one
+is already open, the next failure is part of it. The **Zoho Books health** widget shows what is
+open. See [Alerts](../alerts).
+
 ## A payment was rejected outright
 
 Zoho's `payment_mode` is a **closed vocabulary of seven values**, and anything else is a 400. If a

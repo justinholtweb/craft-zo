@@ -6,7 +6,9 @@ use Craft;
 use craft\base\Component;
 use craft\helpers\Json;
 use craft\helpers\StringHelper;
+use GuzzleHttp\Exception\RequestException;
 use justinholtweb\zo\errors\NotConnectedException;
+use justinholtweb\zo\errors\OAuthRefusedException;
 use justinholtweb\zo\errors\ZohoApiException;
 use justinholtweb\zo\models\LogEntry;
 use justinholtweb\zo\Plugin;
@@ -88,12 +90,23 @@ class Auth extends Component
                 }
             }
 
-            $response = $this->tokenRequest([
-                'grant_type' => 'refresh_token',
-                'refresh_token' => $settings->getParsedRefreshToken(),
-                'client_id' => $settings->getParsedClientId(),
-                'client_secret' => $settings->getParsedClientSecret(),
-            ]);
+            try {
+                $response = $this->tokenRequest([
+                    'grant_type' => 'refresh_token',
+                    'refresh_token' => $settings->getParsedRefreshToken(),
+                    'client_id' => $settings->getParsedClientId(),
+                    'client_secret' => $settings->getParsedClientSecret(),
+                ]);
+            } catch (ZohoApiException $e) {
+                // Zoho refusing the grant is the one failure nobody notices: every sync after it
+                // fails the same way, and the merchant hears about it from their accountant. A
+                // network failure (no status, no OAuth error) is not a refusal and retries.
+                if ($e instanceof OAuthRefusedException) {
+                    Plugin::getInstance()->getAlerts()->noteAuthFailure($e->getMessage());
+                }
+
+                throw $e;
+            }
 
             $token = (string)($response['access_token'] ?? '');
 
@@ -117,6 +130,16 @@ class Auth extends Component
     /**
      * Throw away the cached access token, so the next call refreshes.
      */
+    /**
+     * The access token currently cached, without minting one — for redacting it out of an alert.
+     */
+    public function getCachedAccessToken(): ?string
+    {
+        $cached = Craft::$app->getCache()->get($this->cacheKey());
+
+        return is_string($cached) && $cached !== '' ? $cached : null;
+    }
+
     public function forgetAccessToken(): void
     {
         Craft::$app->getCache()->delete($this->cacheKey());
@@ -324,7 +347,7 @@ class Auth extends Component
             }
 
             if (isset($data['error'])) {
-                throw new ZohoApiException(
+                throw new OAuthRefusedException(
                     $this->describeOauthError((string)$data['error']),
                     $response->getStatusCode(),
                     null,
@@ -342,9 +365,16 @@ class Auth extends Component
 
             throw $e;
         } catch (\Throwable $e) {
-            $this->log('oauth', LogEntry::LEVEL_ERROR, $started, $url, null, $e->getMessage(), $params, null);
+            $status = $e instanceof RequestException ? $e->getResponse()?->getStatusCode() : null;
+            $this->log('oauth', LogEntry::LEVEL_ERROR, $started, $url, $status, $e->getMessage(), $params, null);
 
-            throw new ZohoApiException($e->getMessage(), null, null, null, $e);
+            // A 4xx from the accounts server is a refusal too (a revoked client answers 400 on some
+            // data centres); anything without a response is the network.
+            if ($status !== null && $status >= 400 && $status < 500) {
+                throw new OAuthRefusedException($e->getMessage(), $status, null, null, $e);
+            }
+
+            throw new ZohoApiException($e->getMessage(), $status, null, null, $e);
         }
     }
 

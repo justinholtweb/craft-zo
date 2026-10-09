@@ -58,6 +58,22 @@ for it, with two buttons:
 The preview is built by the same code the sync uses, so what you are reading is byte-for-byte what
 Zoho would receive. That is also true of `--dry-run` on the console.
 
+## The Orders index
+
+Commerce's own **Orders** index gets three things, for anyone with *View what has been synced*:
+
+- A **Zoho Books** column (add it from the index's column picker): *Synced*, *Not reconciled*,
+  *Failed*, *Pending*, *Skipped* or *Not synced*. *Failed* means any of the order's documents
+  failed — the customer, the invoice, a payment or a refund — so an order whose invoice is in Zoho
+  but whose payment was refused shows as failed, not synced.
+- A **Zoho Books status** filter, under the index's filters and in custom sources. "Is one of
+  *Failed*, *Not reconciled*" is the to-do list; save it as a custom source and it is one click
+  away. The filter and the column are built from the same rules, so they cannot disagree.
+- A **Sync to Zoho Books** bulk action, for people with *Sync orders to Zoho Books*. Each selected
+  completed order is queued, with the eligibility rules overridden (as with **Sync now**); carts
+  are skipped. Documents that already exist in Zoho are reused, never resent, so selecting an
+  already-synced order only picks up a payment or refund that is missing.
+
 ## Backfilling an existing store {#backfill}
 
 If you are connecting Zo to a store that has already been trading, do this in
@@ -100,6 +116,9 @@ php craft zo/auth/refresh               # prove the refresh token still works
 
 php craft zo/log/prune                  # honour the retention setting
 php craft zo/log/clear                  # empty it
+
+php craft zo/alerts/check               # evaluate failure alerts now
+php craft zo/alerts/test                # send a sample alert through every configured channel
 ```
 
 Craft lists plugin commands under a bare `php craft help`, not under `php craft help zo`.

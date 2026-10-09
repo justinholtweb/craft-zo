@@ -3,21 +3,36 @@
 namespace justinholtweb\zo;
 
 use Craft;
+use craft\base\Element;
 use craft\base\Model;
 use craft\base\Plugin as BasePlugin;
+use craft\commerce\elements\conditions\orders\OrderCondition;
+use craft\commerce\elements\db\OrderQuery;
 use craft\commerce\elements\Order;
 use craft\commerce\events\OrderStatusEvent;
 use craft\commerce\events\TransactionEvent;
 use craft\commerce\records\Transaction as TransactionRecord;
 use craft\commerce\services\OrderHistories;
 use craft\commerce\services\Transactions;
+use craft\events\DefineAttributeHtmlEvent;
+use craft\events\PopulateElementsEvent;
+use craft\events\RegisterComponentTypesEvent;
+use craft\events\RegisterConditionRulesEvent;
+use craft\events\RegisterElementActionsEvent;
+use craft\events\RegisterElementTableAttributesEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\events\RegisterUserPermissionsEvent;
+use craft\helpers\Html;
+use craft\services\Dashboard;
 use craft\services\UserPermissions;
 use craft\web\twig\variables\CraftVariable;
 use craft\web\UrlManager;
 use craft\web\View;
+use justinholtweb\zo\elements\actions\SyncToZoho;
+use justinholtweb\zo\elements\conditions\ZohoStatusConditionRule;
+use justinholtweb\zo\models\Link;
 use justinholtweb\zo\models\Settings;
+use justinholtweb\zo\services\Alerts;
 use justinholtweb\zo\services\Api;
 use justinholtweb\zo\services\Auth;
 use justinholtweb\zo\services\Connection;
@@ -28,11 +43,13 @@ use justinholtweb\zo\services\Links;
 use justinholtweb\zo\services\Log;
 use justinholtweb\zo\services\Sync;
 use justinholtweb\zo\twig\ZoVariable;
+use justinholtweb\zo\widgets\HealthWidget;
 use yii\base\Event;
 
 /**
  * Zo — Zoho Books for Craft Commerce.
  *
+ * @property-read Alerts $alerts
  * @property-read Api $api
  * @property-read Auth $auth
  * @property-read Connection $connection
@@ -48,7 +65,7 @@ class Plugin extends BasePlugin
 {
     public const HANDLE = 'zo';
 
-    public string $schemaVersion = '5.0.1';
+    public string $schemaVersion = '5.1.0';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
@@ -59,6 +76,7 @@ class Plugin extends BasePlugin
     {
         return [
             'components' => [
+                'alerts' => ['class' => Alerts::class],
                 'api' => ['class' => Api::class],
                 'auth' => ['class' => Auth::class],
                 'connection' => ['class' => Connection::class],
@@ -82,6 +100,7 @@ class Plugin extends BasePlugin
         $this->_registerTwigVariable();
         $this->_registerPermissions();
         $this->_registerCpRoutes();
+        $this->_registerWidgets();
 
         // Zo can be installed while Commerce is disabled or mid-upgrade, and everything below
         // reaches for an order.
@@ -91,6 +110,7 @@ class Plugin extends BasePlugin
 
         $this->_registerOrderEvents();
         $this->_registerOrderEditPanel();
+        $this->_registerOrderIndex();
     }
 
     /**
@@ -100,6 +120,11 @@ class Plugin extends BasePlugin
     {
         return class_exists(\craft\commerce\Plugin::class)
             && Craft::$app->getPlugins()->isPluginEnabled('commerce');
+    }
+
+    public function getAlerts(): Alerts
+    {
+        return $this->get('alerts');
     }
 
     public function getApi(): Api
@@ -172,6 +197,7 @@ class Plugin extends BasePlugin
             'customFieldRows' => $this->getSettings()->getCustomFieldRows(),
             'taxMapRows' => $this->getSettings()->getTaxMapRows(),
             'paymentModeRows' => $this->getSettings()->getPaymentModeMapRows(),
+            'depositAccountRows' => $this->getSettings()->getDepositAccountMapRows(),
         ]);
     }
 
@@ -480,6 +506,123 @@ class Plugin extends BasePlugin
                 $plugin->getSync()->queue($order);
             }
         );
+    }
+
+    private function _registerWidgets(): void
+    {
+        Event::on(
+            Dashboard::class,
+            Dashboard::EVENT_REGISTER_WIDGET_TYPES,
+            static function(RegisterComponentTypesEvent $event) {
+                $event->types[] = HealthWidget::class;
+            }
+        );
+    }
+
+    /**
+     * The Orders index: a Zoho column, a "Zoho Books status" filter, and a bulk "Sync to Zoho
+     * Books" action.
+     *
+     * Every hook is attached to the Order class, not to Element: the table-attribute events do not
+     * say which element type is asking.
+     */
+    private function _registerOrderIndex(): void
+    {
+        // Registered unconditionally. A rule registered only for some users or settings is
+        // dropped from saved conditions, and a custom source built on it silently widens to
+        // every order.
+        Event::on(
+            OrderCondition::class,
+            OrderCondition::EVENT_REGISTER_CONDITION_RULES,
+            static function(RegisterConditionRulesEvent $event) {
+                $event->conditionRules[] = ZohoStatusConditionRule::class;
+            }
+        );
+
+        Event::on(
+            Order::class,
+            Element::EVENT_REGISTER_TABLE_ATTRIBUTES,
+            static function(RegisterElementTableAttributesEvent $event) {
+                $event->tableAttributes['zoStatus'] = ['label' => Craft::t('zo', 'Zoho Books')];
+            }
+        );
+
+        Event::on(
+            Order::class,
+            Element::EVENT_DEFINE_ATTRIBUTE_HTML,
+            static function(DefineAttributeHtmlEvent $event) {
+                if ($event->attribute !== 'zoStatus') {
+                    return;
+                }
+
+                /** @var Order $order */
+                $order = $event->sender;
+                $event->html = Plugin::getInstance()->orderStatusHtml($order);
+                $event->handled = true;
+            }
+        );
+
+        // One lookup per index page rather than per row.
+        Event::on(
+            OrderQuery::class,
+            OrderQuery::EVENT_AFTER_POPULATE_ELEMENTS,
+            static function(PopulateElementsEvent $event) {
+                $request = Craft::$app->getRequest();
+
+                if ($request->getIsConsoleRequest() || !$request->getIsCpRequest() || ($request->getActionSegments()[0] ?? null) !== 'element-indexes') {
+                    return;
+                }
+
+                $ids = [];
+
+                foreach ($event->elements as $element) {
+                    if ($element instanceof Order && $element->id) {
+                        $ids[] = $element->id;
+                    }
+                }
+
+                Plugin::getInstance()->getLinks()->prefetchOrderStatuses($ids);
+            }
+        );
+
+        Event::on(
+            Order::class,
+            Element::EVENT_REGISTER_ACTIONS,
+            static function(RegisterElementActionsEvent $event) {
+                // Actions are not saved anywhere, so offering this only to people who may use it
+                // is safe; the action checks the permission again when it runs.
+                if (Craft::$app->getUser()->checkPermission('zo-syncOrders')) {
+                    $event->actions[] = SyncToZoho::class;
+                }
+            }
+        );
+    }
+
+    /**
+     * The Orders index cell: a status dot and a word, linking to the order's Zoho rows.
+     */
+    public function orderStatusHtml(Order $order): string
+    {
+        if (!$order->id || !Craft::$app->getUser()->checkPermission('zo-viewSync')) {
+            return '';
+        }
+
+        $status = $this->getLinks()->orderStatus($order->id);
+        $label = Links::orderStatusOptions()[$status] ?? $status;
+        $color = match ($status) {
+            Link::ORDER_SYNCED => 'green',
+            Link::ORDER_NOT_RECONCILED => 'orange',
+            Link::ORDER_FAILED => 'red',
+            Link::ORDER_PENDING => 'yellow',
+            default => 'disabled',
+        };
+
+        if ($status === Link::ORDER_NONE) {
+            return Html::tag('span', Html::encode($label), ['class' => 'light']);
+        }
+
+        return Html::tag('span', '', ['class' => ['status', $color], 'aria-hidden' => 'true'])
+            . Html::encode($label);
     }
 
     /**

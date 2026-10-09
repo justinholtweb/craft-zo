@@ -8,6 +8,8 @@ use craft\commerce\elements\Order;
 use craft\commerce\models\LineItem;
 use craft\commerce\models\Transaction;
 use craft\elements\Address;
+use craft\helpers\Json;
+use justinholtweb\zo\events\ProcessorFeeEvent;
 use justinholtweb\zo\helpers\Money;
 use justinholtweb\zo\models\Settings;
 use justinholtweb\zo\Plugin;
@@ -32,6 +34,21 @@ class Documents extends Component
     public const MAX_NAME_LENGTH = 100;
 
     public const MAX_DESCRIPTION_LENGTH = 2000;
+
+    /**
+     * @event ProcessorFeeEvent after Zo has read a payment's processor fee from the gateway
+     * response; change `fee` to supply or veto one.
+     */
+    public const EVENT_DEFINE_PROCESSOR_FEE = 'defineProcessorFee';
+
+    /**
+     * Stripe's zero-decimal currencies: a fee of 120 in JPY is ¥120, not ¥1.20.
+     * https://docs.stripe.com/currencies#zero-decimal
+     */
+    private const ZERO_DECIMAL_CURRENCIES = [
+        'bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv',
+        'xaf', 'xof', 'xpf',
+    ];
 
     /**
      * A Zoho contact built from the order's billing details.
@@ -209,11 +226,156 @@ class Documents extends Component
             'gateway' => $gateway !== '' ? " · {$gateway}" : '',
         ]), self::MAX_DESCRIPTION_LENGTH);
 
-        if ($settings->depositAccountId !== '') {
-            $payload['account_id'] = $settings->depositAccountId;
+        $accountId = $this->depositAccount($transaction);
+
+        if ($accountId !== '') {
+            $payload['account_id'] = $accountId;
+        }
+
+        // What the processor kept. Zoho deposits `amount - bank_charges` and books the rest as a
+        // bank charge, which is what makes the deposit match the payout line on the statement.
+        if ($settings->recordProcessorFees) {
+            $fee = $this->processorFee($transaction);
+
+            if ($fee !== null && $fee > 0) {
+                $payload['bank_charges'] = $fee;
+            }
         }
 
         return $payload;
+    }
+
+    /**
+     * The Zoho account this transaction's gateway deposits into (and refunds from).
+     */
+    public function depositAccount(Transaction $transaction): string
+    {
+        try {
+            $handle = $transaction->getGateway()?->handle;
+        } catch (\Throwable) {
+            // The gateway was deleted after the payment was taken. The default still applies.
+            $handle = null;
+        }
+
+        return Plugin::getInstance()->getSettings()->getDepositAccountFor($handle);
+    }
+
+    /**
+     * The processor's fee for a payment, in the payment's own currency, or null.
+     *
+     * Read from what the gateway stored on the transaction — no call to the processor is made:
+     *
+     * - **Stripe** puts the fee on the charge's balance transaction, in minor units, and only when
+     *   it was expanded: a Charge (`balance_transaction`), a PaymentIntent's `latest_charge`, or
+     *   the older `charges.data[]`. Commerce Stripe usually stores the intent with the charge as a
+     *   bare id, in which case there is nothing here to read.
+     * - **PayPal Checkout** puts it in `seller_receivable_breakdown.paypal_fee` on the capture,
+     *   either at the top level or under `purchase_units[].payments.captures[]`.
+     * - **PayPal Express** (NVP) sends `PAYMENTINFO_0_FEEAMT` or `FEEAMT`.
+     *
+     * A fee in another currency than the payment Zo sends is ignored rather than converted —
+     * Stripe reports it in the *settlement* currency, and `bank_charges` is in the payment's. So is
+     * a fee that is not less than the payment, which is a misread, not a fee.
+     */
+    public function processorFee(Transaction $transaction): ?float
+    {
+        // The currency the payload's `amount` is in — the transaction's own, not the payment
+        // currency a customer may have checked out in.
+        $fee = $this->feeFromResponse($transaction->response, (string)($transaction->currency ?: $transaction->paymentCurrency));
+        $amount = abs((float)$transaction->amount);
+
+        if ($fee !== null && ($fee < 0 || ($amount > 0 && $fee >= $amount))) {
+            $fee = null;
+        }
+
+        if ($this->hasEventHandlers(self::EVENT_DEFINE_PROCESSOR_FEE)) {
+            $event = new ProcessorFeeEvent(['transaction' => $transaction, 'fee' => $fee]);
+            $this->trigger(self::EVENT_DEFINE_PROCESSOR_FEE, $event);
+            $fee = $event->fee;
+        }
+
+        return $fee !== null && $fee > 0 ? Money::round($fee) : null;
+    }
+
+    /**
+     * @param mixed $response the transaction's stored response — JSON, an array, or nothing
+     */
+    public function feeFromResponse(mixed $response, string $currency): ?float
+    {
+        if (is_string($response)) {
+            $response = Json::decodeIfJson($response);
+        }
+
+        if (!is_array($response)) {
+            return null;
+        }
+
+        $currency = strtolower($currency);
+
+        // Stripe: a balance transaction, wherever the charge happens to sit.
+        $charges = [$response, $response['latest_charge'] ?? null];
+
+        foreach ((array)($response['charges']['data'] ?? []) as $charge) {
+            $charges[] = $charge;
+        }
+
+        foreach ($charges as $charge) {
+            $balance = is_array($charge) ? ($charge['balance_transaction'] ?? null) : null;
+
+            if (!is_array($balance) || !isset($balance['fee']) || !is_numeric($balance['fee'])) {
+                continue;
+            }
+
+            $feeCurrency = strtolower((string)($balance['currency'] ?? ''));
+
+            if ($currency !== '' && $feeCurrency !== '' && $feeCurrency !== $currency) {
+                return null;
+            }
+
+            $divisor = in_array($feeCurrency ?: $currency, self::ZERO_DECIMAL_CURRENCIES, true) ? 1 : 100;
+
+            return (int)$balance['fee'] / $divisor;
+        }
+
+        // PayPal Checkout (Orders v2): the capture's breakdown.
+        $captures = [$response];
+
+        foreach ((array)($response['purchase_units'] ?? []) as $unit) {
+            foreach ((array)($unit['payments']['captures'] ?? []) as $capture) {
+                $captures[] = $capture;
+            }
+        }
+
+        foreach ($captures as $capture) {
+            $paypalFee = is_array($capture) ? ($capture['seller_receivable_breakdown']['paypal_fee'] ?? null) : null;
+
+            if (!is_array($paypalFee) || !isset($paypalFee['value']) || !is_numeric($paypalFee['value'])) {
+                continue;
+            }
+
+            $feeCurrency = strtolower((string)($paypalFee['currency_code'] ?? ''));
+
+            if ($currency !== '' && $feeCurrency !== '' && $feeCurrency !== $currency) {
+                return null;
+            }
+
+            return (float)$paypalFee['value'];
+        }
+
+        // PayPal Express (NVP).
+        foreach (['PAYMENTINFO_0_FEEAMT' => 'PAYMENTINFO_0_CURRENCYCODE', 'FEEAMT' => 'CURRENCYCODE'] as $feeKey => $currencyKey) {
+            if (isset($response[$feeKey]) && is_numeric($response[$feeKey])) {
+                $feeCurrency = strtolower((string)($response[$currencyKey] ?? ''));
+
+                if ($currency !== '' && $feeCurrency !== '' && $feeCurrency !== $currency) {
+                    return null;
+                }
+
+                return (float)$response[$feeKey];
+            }
+        }
+
+        return null;
     }
 
     /**

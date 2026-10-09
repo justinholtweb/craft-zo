@@ -108,6 +108,19 @@ class Sync extends Component
      */
     public function syncOrder(Order $order, bool $force = false): SyncResult
     {
+        try {
+            return $this->runSync($order, $force);
+        } finally {
+            // Every sync is a chance to notice trouble without cron. Fail-open: see afterSync().
+            Plugin::getInstance()->getAlerts()->afterSync();
+        }
+    }
+
+    /**
+     * The sync itself; {@see syncOrder()} wraps it so every exit evaluates the alerts.
+     */
+    private function runSync(Order $order, bool $force): SyncResult
+    {
         $plugin = Plugin::getInstance();
         $settings = $plugin->getSettings();
         $links = $plugin->getLinks();
@@ -696,7 +709,8 @@ class Sync extends Component
 
     private function refundCreditNote(Order $order, Transaction $transaction, string $creditNoteId, SyncResult $result): void
     {
-        $accountId = trim(Plugin::getInstance()->getSettings()->depositAccountId);
+        // The gateway's own account first: a Stripe refund leaves the Stripe clearing account.
+        $accountId = Plugin::getInstance()->getDocuments()->depositAccount($transaction);
 
         // Zoho requires the account the money left from and offers no default. Without one, the
         // credit note stands on its own — the revenue is reversed and the customer's balance is
